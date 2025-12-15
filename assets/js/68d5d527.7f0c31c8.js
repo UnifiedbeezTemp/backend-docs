@@ -1,1 +1,0 @@
-"use strict";(globalThis.webpackChunkunifiedbeez_docs=globalThis.webpackChunkunifiedbeez_docs||[]).push([[9324],{2354:e=>{e.exports=JSON.parse('{"metadata":{"permalink":"/backend-docs/blog","page":1,"postsPerPage":10,"totalPages":1,"totalCount":4,"blogDescription":"Blog","blogTitle":"Blog"}}')}}]);
