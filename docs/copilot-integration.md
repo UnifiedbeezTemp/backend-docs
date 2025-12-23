@@ -33,7 +33,7 @@ All endpoints require JWT authentication via `SessionAuthGuard`.
     id: string;
     name: string;
     type: 'choice' | 'input' | 'custom' | 'button';
-    botMessage: string;
+    botMessage: string; // Interpolated text only
     options?: Array<{
       label: string;
       value: any;
@@ -42,16 +42,21 @@ All endpoints require JWT authentication via `SessionAuthGuard`.
       nextSubstepId?: string;
       isCustom?: boolean;
     }>;
-    attachment?: {
-      name: string;
-      data: any;
-    };
     canEdit?: boolean;
     canSkip?: boolean;
+    formField?: string;
+    optionsMobileType?: string;
   };
   uiDirectives?: {
+    components?: Array<{ name: string; metadata?: any }>;
     showAttachment?: boolean;
     [key: string]: any;
+  };
+  lastUserMessage?: {
+    messageType: string;
+    content: string;
+    metadata: any;
+    createdAt: string;
   };
 }
 ```
@@ -437,13 +442,59 @@ if (response.conversationComplete) {
 
 ## UI Directives Reference
 
-| Directive                 | Type     | When Used                           |
-| ------------------------- | -------- | ----------------------------------- |
-| `showPlanUpgrade`         | boolean  | User selection exceeds current plan |
-| `suggestedPlan`           | PlanType | Which plan to upgrade to            |
-| `showAttachment`          | object   | Render special UI component         |
-| `highlightOption`         | string   | Auto-suggest from AI parsing        |
-| `requiresReconfiguration` | string[] | Edit triggered reconfiguration      |
+| Directive                 | Type     | When Used                                  |
+| ------------------------- | -------- | ------------------------------------------ |
+| `components`              | array    | Components to render alongside bot message |
+| `showPlanUpgrade`         | boolean  | User selection exceeds current plan        |
+| `suggestedPlan`           | PlanType | Which plan to upgrade to                   |
+| `highlightOption`         | string   | Auto-suggest from AI parsing               |
+| `requiresReconfiguration` | string[] | Edit triggered reconfiguration             |
+
+---
+
+## Bot Message & Components
+
+Bot messages support text + component rendering:
+
+```typescript
+{
+  "botMessage": "Hi Joshua, I'm Beezaro\n\nPlease confirm your plan",
+  "uiDirectives": {
+    "components": [
+      { "name": "planSummary", "metadata": {} }
+    ]
+  }
+}
+
+// Render
+<BotMessage>{response.botMessage}</BotMessage>
+{response.uiDirectives?.components?.map(comp =>
+  <Component name={comp.name} {...comp.metadata} />
+)}
+```
+
+**Available components:** `planSummary`, `plansPreview`, `businessLogo`, `logoUpload`, `AssistantCard`
+
+---
+
+## Last User Message
+
+Responses include the user's message:
+
+```typescript
+{
+  "lastUserMessage": {
+    "messageType": "USER_SELECTION",
+    "content": "HEALTHCARE_CLINICS",
+    "metadata": { ... },
+    "createdAt": "2025-12-22T12:00:00.000Z"
+  }
+}
+
+// Use for immediate UI update
+appendMessage(response.lastUserMessage);
+appendMessage({ type: 'bot', content: response.botMessage });
+```
 
 ---
 
@@ -451,21 +502,21 @@ if (response.conversationComplete) {
 
 ### planConfirmation
 
-Shows plan summary attachment:
+Render plan summary component:
 
 ```typescript
-if (currentSubstep.attachment?.name === "planSummary") {
+if (response.uiDirectives?.components?.some((c) => c.name === "planSummary")) {
   renderPlanSummary(userData.plan);
 }
 ```
 
 ### changePlan
 
-Shows available plans:
+Render plans preview:
 
 ```typescript
-if (currentSubstep.attachment?.name === "plansPreview") {
-  const plans = await fetchPlans(); // Your existing plans API
+if (response.uiDirectives?.components?.some((c) => c.name === "plansPreview")) {
+  const plans = await fetchPlans();
   renderPlansGrid(plans);
 }
 ```
@@ -526,17 +577,18 @@ if (currentSubstep.attachment?.name === "businessDataPreview") {
 
 ### businessNotListed
 
-File upload for logo:
+Render logo upload component:
 
 ```typescript
-if (currentSubstep.attachment?.name === "logoUpload") {
+if (response.uiDirectives?.components?.some((c) => c.name === "logoUpload")) {
   renderFileUploader({
     accept: "image/*",
     onUpload: async (file) => {
       const logoUrl = await uploadToS3(file);
       await POST("/copilot/message", {
         content: logoUrl,
-        metadata: { formField: "business_logo" },
+        inputType: "text",
+        metadata: { formField: "logo" },
       });
     },
   });
@@ -545,17 +597,86 @@ if (currentSubstep.attachment?.name === "logoUpload") {
 
 ### beezaroAssistants
 
-Shows recommended AI assistants:
+Render AI assistant cards:
 
 ```typescript
-if (currentSubstep.attachment?.name === "beezaroAssistants") {
-  renderAssistantsList(currentSubstep.attachment.data.assistants);
-}
+const assistantComponents = response.uiDirectives?.components?.filter(
+  (c) => c.name === "AssistantCard"
+);
+
+assistantComponents?.forEach((comp) => {
+  renderAssistantCard({
+    name: comp.metadata.name,
+    tags: comp.metadata.tags,
+    id: comp.metadata.id,
+  });
+});
 ```
 
 ---
 
-## Message Metadata Structure
+## Bot Message Structure
+
+Bot messages now use an array format supporting both text and components:
+
+```json
+{
+  "botMessage": "Hi Joshua, I'm Beezaro\n\nPlease confirm that you selected the BUSINESS plan",
+  "currentSubstep": {
+    "botMessage": "Hi Joshua, I'm Beezaro\n\nPlease confirm that you selected the BUSINESS plan"
+    // ... other fields
+  },
+  "uiDirectives": {
+    "components": [
+      {
+        "name": "planSummary",
+        "metadata": {}
+      }
+    ]
+  }
+}
+```
+
+**Backend processing:**
+
+- Extracts text messages from array
+- Interpolates variables like `{firstName}`, `{selectedPlan}`
+- Returns plain text in `botMessage`
+- Returns components separately in `uiDirectives.components`
+
+**Frontend rendering:**
+
+```typescript
+// Display bot text
+<BotMessage>{response.botMessage}</BotMessage>;
+
+// Render components
+{
+  response.uiDirectives?.components?.map((comp) => {
+    switch (comp.name) {
+      case "planSummary":
+        return <PlanSummaryCard {...comp.metadata} />;
+      case "businessLogo":
+        return <BusinessLogoPreview {...comp.metadata} />;
+      case "AssistantCard":
+        return <AssistantCard {...comp.metadata} />;
+      // ... other components
+    }
+  });
+}
+```
+
+**Available components:**
+
+- `planSummary` - Display user's plan details
+- `plansPreview` - Show all available plans for selection
+- `businessLogo` - Preview selected business logo
+- `logoUpload` - File upload for business logo
+- `AssistantCard` - AI assistant configuration card
+
+---
+
+## Last User Message
 
 Each message in `recentMessages` contains full substep configuration to enable accurate UI reconstruction:
 
@@ -759,17 +880,23 @@ interface CopilotResponse {
   currentSubstep: Substep;
   nextSubstepId?: string;
   uiDirectives?: {
+    components?: Array<{ name: string; metadata?: any }>;
     showPlanUpgrade?: boolean;
     suggestedPlan?: PlanType;
     highlightOption?: string;
     requiresReconfiguration?: string[];
-    showAttachment?: { name: string; data: any };
     assistantSuggestions?: {
       tone: string;
       style: string;
       personality: string;
     };
     possibleQuery?: string;
+  };
+  lastUserMessage?: {
+    messageType: string;
+    content: string;
+    metadata: any;
+    createdAt: string;
   };
   sectionComplete?: boolean;
   conversationComplete?: boolean;
