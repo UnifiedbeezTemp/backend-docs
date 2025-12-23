@@ -91,7 +91,7 @@ const response = await fetch("/copilot/start", {
 
 **Examples:**
 
-**Selection:**
+**Choice (Button/Option Selection):**
 
 ```typescript
 await fetch("/copilot/message", {
@@ -99,7 +99,7 @@ await fetch("/copilot/message", {
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     content: "HEALTHCARE_CLINICS",
-    inputType: "selection",
+    inputType: "choice",
     metadata: {
       selectedOption: "HEALTHCARE_CLINICS",
       formField: "industry",
@@ -121,7 +121,7 @@ await fetch("/copilot/message", {
 });
 ```
 
-**General Chat:**
+**General Chat (No formField):**
 
 ```typescript
 // User types: "I run a dental clinic"
@@ -252,7 +252,29 @@ await fetch("/copilot/edit/teamSize", {
   recentMessages: Array<{
     messageType: 'USER_INPUT' | 'USER_SELECTION' | 'USER_EDIT' | 'AI_RESPONSE' | 'SECTION_COMPLETE' | 'SYSTEM';
     content: string;
-    metadata: any;
+    metadata: {
+      section: string;
+      substep: string;
+      action: string;
+      formField?: string;
+      selectedValue?: any;
+      substepConfig?: {
+        id: string;
+        type: 'choice' | 'input' | 'custom' | 'button';
+        canEdit: boolean;
+        canSkip?: boolean;
+        formField?: string;
+        botMessage: string;
+        options?: Array<{
+          label: string;
+          value: any;
+          type: 'radio' | 'select' | 'button';
+          emoji?: string;
+          nextSubstepId?: string;
+          isCustom?: boolean;
+        }>;
+      };
+    };
     createdAt: string;
   }>;
 }
@@ -533,6 +555,99 @@ if (currentSubstep.attachment?.name === "beezaroAssistants") {
 
 ---
 
+## Message Metadata Structure
+
+Each message in `recentMessages` contains full substep configuration to enable accurate UI reconstruction:
+
+```typescript
+{
+  "messageType": "USER_SELECTION",
+  "content": "HEALTHCARE_CLINICS",
+  "metadata": {
+    "section": "businessIdentity",
+    "substep": "businessIndustry",
+    "action": "select",
+    "formField": "industry",
+    "selectedValue": "HEALTHCARE_CLINICS",
+    "substepConfig": {
+      "id": "businessIndustry",
+      "type": "choice",
+      "canEdit": true,
+      "canSkip": true,
+      "formField": "industry",
+      "botMessage": "Next, which industry does your business belong to?",
+      "options": [
+        {
+          "emoji": "🛍️",
+          "label": "E-commerce / Retail",
+          "value": "ECOMMERCE_RETAIL",
+          "type": "radio",
+          "nextSubstepId": "businessName"
+        },
+        {
+          "emoji": "🏥",
+          "label": "Healthcare / Clinics",
+          "value": "HEALTHCARE_CLINICS",
+          "type": "radio",
+          "nextSubstepId": "businessName"
+        }
+        // ... more options
+      ]
+    }
+  },
+  "createdAt": "2025-12-22T12:00:00.000Z"
+}
+```
+
+**Why substepConfig is included:**
+
+Backend is the single source of truth. Frontend doesn't need to maintain or parse `copilotSteps.json` - all UI rendering data comes from API responses.
+
+**Rendering past messages:**
+
+```typescript
+// Render user's past selection with context
+const message = recentMessages[0];
+const { substepConfig, selectedValue } = message.metadata;
+
+// Show what options were available
+const selectedOption = substepConfig.options.find(
+  (opt) => opt.value === selectedValue
+);
+
+return (
+  <MessageBubble>
+    <BotMessage>{substepConfig.botMessage}</BotMessage>
+    <OptionsGrid>
+      {substepConfig.options.map((option) => (
+        <Option
+          key={option.value}
+          selected={option.value === selectedValue}
+          disabled={!substepConfig.canEdit}
+        >
+          {option.emoji} {option.label}
+        </Option>
+      ))}
+    </OptionsGrid>
+    <UserResponse>{selectedOption.label}</UserResponse>
+  </MessageBubble>
+);
+```
+
+**Edit functionality:**
+
+```typescript
+// Check if message can be edited
+if (message.metadata.substepConfig?.canEdit) {
+  showEditButton(() => {
+    // Call /copilot/edit/:substepId with new value
+    editSubstep(message.metadata.substep, newValue);
+  });
+}
+```
+
+---
+
 ## Progress Tracking
 
 ```typescript
@@ -600,6 +715,8 @@ type PlanType = "INDIVIDUAL" | "BUSINESS" | "PREMIUM" | "ORGANISATION";
 
 type SubstepType = "choice" | "input" | "custom" | "button";
 
+type InputType = "text" | "choice" | "file";
+
 interface SubstepOption {
   label: string;
   value: any;
@@ -628,6 +745,15 @@ interface Substep {
   isEndOfStep?: boolean;
 }
 
+interface SendMessagePayload {
+  content: string;
+  inputType?: InputType;
+  metadata?: {
+    selectedOption?: any;
+    formField?: string;
+  };
+}
+
 interface CopilotResponse {
   botMessage: string;
   currentSubstep: Substep;
@@ -638,6 +764,12 @@ interface CopilotResponse {
     highlightOption?: string;
     requiresReconfiguration?: string[];
     showAttachment?: { name: string; data: any };
+    assistantSuggestions?: {
+      tone: string;
+      style: string;
+      personality: string;
+    };
+    possibleQuery?: string;
   };
   sectionComplete?: boolean;
   conversationComplete?: boolean;
