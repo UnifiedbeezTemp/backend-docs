@@ -78,7 +78,7 @@ const response = await fetch("/copilot/start", {
 ```typescript
 {
   content: string;                    // User's selection/input value
-  inputType?: 'text' | 'selection' | 'file';
+  inputType?: 'text' | 'choice' | 'file';
   metadata?: {
     selectedOption?: any;
     formField?: string;
