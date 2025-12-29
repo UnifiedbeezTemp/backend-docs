@@ -577,23 +577,34 @@ if (currentSubstep.attachment?.name === "businessDataPreview") {
 
 ### businessNotListed
 
-Render logo upload component:
+Render logo upload component. Upload directly to backend endpoint:
 
 ```typescript
 if (response.uiDirectives?.components?.some((c) => c.name === "logoUpload")) {
   renderFileUploader({
-    accept: "image/*",
+    accept: "image/png,image/jpeg,image/jpg,image/webp",
+    maxSize: 5 * 1024 * 1024, // 5MB
     onUpload: async (file) => {
-      const logoUrl = await uploadToS3(file);
-      await POST("/copilot/message", {
-        content: logoUrl,
-        inputType: "text",
-        metadata: { formField: "logo" },
+      const formData = new FormData();
+      formData.append("logo", file);
+      formData.append("substepId", "businessNotListed");
+
+      const response = await POST("/copilot/upload-logo", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
+
+      // Response advances to next section automatically
+      updateUI(response);
     },
   });
 }
 ```
+
+**Validation:**
+
+- Allowed types: PNG, JPG, JPEG, WebP
+- Max size: 5MB
+- Completes `businessNotListed` substep and advances to next section
 
 ### beezaroAssistants
 
