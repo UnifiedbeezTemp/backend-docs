@@ -777,3 +777,111 @@ SELECT * FROM escalation_keywords WHERE channel_ai_config_id IN (
   SELECT id FROM channel_ai_configs WHERE is_recommendation = true
 );
 ```
+
+# Testing Automation Step in Postman
+
+## Prerequisites
+
+- Completed AI Assistant step
+- Active conversation with JWT token
+
+## Step 1: Verify Current State
+
+**GET** `/copilot/state`
+
+**Expected Response:**
+
+```json
+{
+  "currentSection": "automation",
+  "currentSubstep": "addAutomations"
+}
+```
+
+## Step 2: Select Automations
+
+**POST** `/copilot/message`
+
+Body:
+
+```json
+{
+  "content": "Yes, add automation",
+  "inputType": "choice",
+  "metadata": {
+    "substepId": "addAutomations",
+    "selectedOption": true,
+    "subSelectValues": [
+      "Tag new leads",
+      "Auto-respond after hours",
+      "Follow-up after 24h"
+    ]
+  }
+}
+```
+
+**Expected Response:**
+
+```json
+{
+  "currentSubstep": {
+    "id": "confirmAIAutomations",
+    "botMessage": "Great, I'll add these automations: Tag new leads, Auto-respond after hours, Follow-up after 24h"
+  }
+}
+```
+
+## Step 3: Confirm Automations
+
+**POST** `/copilot/message`
+
+Body:
+
+```json
+{
+  "content": "Confirm and continue",
+  "inputType": "choice",
+  "metadata": {
+    "substepId": "confirmAIAutomations",
+    "selectedOption": true
+  }
+}
+```
+
+**Expected Response:**
+
+```json
+{
+  "currentSubstep": null,
+  "conversationComplete": true
+}
+```
+
+## Verification Queries
+
+**Check created campaign:**
+
+```sql
+SELECT * FROM unified_campaigns
+WHERE user_id = {userId}
+AND name = 'Copilot Onboarding Automations';
+```
+
+**Check automations:**
+
+```sql
+SELECT a.*, c.name as campaign_name
+FROM automations a
+JOIN unified_campaigns c ON c.id = a.campaign_id
+WHERE c.user_id = {userId};
+```
+
+**Check automation steps:**
+
+```sql
+SELECT * FROM automation_steps
+WHERE automation_id IN (
+  SELECT id FROM automations WHERE user_id = {userId}
+)
+ORDER BY automation_id, step_order;
+```
