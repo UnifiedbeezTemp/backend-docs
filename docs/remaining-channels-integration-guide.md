@@ -4,7 +4,7 @@ sidebar_position: 14
 
 # REMAINING CHANNELS INTEGRATION
 
-# Calendly OAuth Integration - Frontend Documentation
+## Calendly OAuth Integration - Frontend Documentation
 
 ## Overview
 
@@ -115,7 +115,7 @@ Revokes tokens and removes the account connection from the database.
 - **URL Cleanup**: Uses `replaceState` to remove OAuth parameters after processing
 - **Error Handling**: Backend returns error messages in response body
 
-# PayPal OAuth Integration - Frontend Documentation
+## PayPal OAuth Integration - Frontend Documentation
 
 ## Overview
 
@@ -231,7 +231,7 @@ const handleDisconnect = async (accountId: number) => {
 - **Session Validation**: State parameter verified against active session
 - **Success Indicators**: Check `paypal=success` or `paypal=error` query parameters
 
-# Shopify OAuth Integration - Frontend Documentation
+## Shopify OAuth Integration - Frontend Documentation
 
 ## Overview
 
@@ -362,7 +362,7 @@ Removes webhooks and deletes the store connection.
 - **Error Handling**: `invalid_hmac` error indicates security validation failure
 - **State Parameter**: Used for CSRF protection
 
-# Stripe Connect OAuth Integration - Frontend Documentation
+## Stripe Connect OAuth Integration - Frontend Documentation
 
 ## Overview
 
@@ -475,7 +475,7 @@ Revokes Stripe access and removes the connected account.
 - **Response Data**: Returns `stripeAccountId`, `accountType`, and `scope`
 - **URL Cleanup**: Removes sensitive OAuth parameters after processing
 
-# Zoom OAuth Integration - Frontend Documentation
+## Zoom OAuth Integration - Frontend Documentation
 
 ## Overview
 
@@ -589,7 +589,7 @@ const error = params.get("error");
 | `/api/v1/channels/zoom/connect`    | POST   | Exchange auth code |
 | `/api/v1/channels/zoom/disconnect` | POST   | Remove connection  |
 
-# Telegram User Account Integration - Frontend Documentation
+## Telegram User Account Integration - Frontend Documentation
 
 ## Overview
 
