@@ -234,19 +234,20 @@ useEffect(() => {
 | `/channels/zoom/callback`   | GET    | No      | Backend callback  |
 | `/channels/zoom/disconnect` | POST   | Session | Remove connection |
 
----
-
 ## Telegram Integration
 
 ### Overview
 
-Telegram uses phone/2FA or QR authentication (not OAuth). Frontend must handle multi-step flows.
+Telegram uses **phone/2FA or QR authentication** (not OAuth).
+The frontend drives multi-step flows by calling backend endpoints directly.
 
-### Phone Flow
+---
 
-**Step 1: Send Code**
+## Phone Authentication Flow
 
-```typescript
+### Step 1: Send Code
+
+```ts
 const res = await fetch(`${API_BASE}/connect/phone`, {
   method: "POST",
   credentials: "include",
@@ -257,9 +258,11 @@ const res = await fetch(`${API_BASE}/connect/phone`, {
 const { sessionId } = await res.json();
 ```
 
-**Step 2: Verify Code**
+---
 
-```typescript
+### Step 2: Verify Code
+
+```ts
 const res = await fetch(`${API_BASE}/connect/verify-code`, {
   method: "POST",
   credentials: "include",
@@ -268,14 +271,17 @@ const res = await fetch(`${API_BASE}/connect/verify-code`, {
 });
 
 const data = await res.json();
+
 if (data.passwordNeeded) {
   // Proceed to 2FA
 }
 ```
 
-**Step 3: 2FA (if needed)**
+---
 
-```typescript
+### Step 3: Verify 2FA (if required)
+
+```ts
 await fetch(`${API_BASE}/connect/verify-2fa`, {
   method: "POST",
   credentials: "include",
@@ -284,11 +290,13 @@ await fetch(`${API_BASE}/connect/verify-2fa`, {
 });
 ```
 
-### QR Flow
+---
 
-**Generate QR**
+## QR Authentication Flow
 
-```typescript
+### Generate QR Code
+
+```ts
 const res = await fetch(`${API_BASE}/connect/qr`, {
   method: "POST",
   credentials: "include",
@@ -297,49 +305,83 @@ const res = await fetch(`${API_BASE}/connect/qr`, {
 const { qrUrl, sessionId } = await res.json();
 ```
 
-**Poll for Completion**
+- Backend generates a Telegram login token.
+- Token is embedded in a `tg://login?token=...` QR code.
+- Token expires automatically (short TTL).
 
-```typescript
+---
+
+### Poll QR Status (state-only)
+
+```ts
 const interval = setInterval(async () => {
   const res = await fetch(
     `${API_BASE}/connect/qr/check?sessionId=${sessionId}`,
-    {
-      credentials: "include",
-    }
+    { credentials: "include" }
   );
 
-  const { success } = await res.json();
-  if (success) {
+  const { status } = await res.json();
+
+  if (status === "SUCCESS") {
     clearInterval(interval);
     loadConnectedAccounts();
+  }
+
+  if (status === "EXPIRED") {
+    clearInterval(interval);
+    // Regenerate QR
   }
 }, 2000);
 ```
 
-### Endpoints
+**Status values**
 
-| Endpoint                                 | Method | Purpose           |
-| ---------------------------------------- | ------ | ----------------- |
-| `/channels/telegram/connect/phone`       | POST   | Send code         |
-| `/channels/telegram/connect/verify-code` | POST   | Verify code       |
-| `/channels/telegram/connect/verify-2fa`  | POST   | Verify 2FA        |
-| `/channels/telegram/connect/qr`          | POST   | Generate QR       |
-| `/channels/telegram/connect/qr/check`    | GET    | Poll QR status    |
-| `/channels/telegram/disconnect`          | POST   | Remove connection |
+- `PENDING` – waiting for user to scan and accept
+- `SUCCESS` – Telegram account connected
+- `EXPIRED` – QR token expired, generate a new one
+
+**Important**
+
+- This endpoint is **read-only**
+- It does **not** call Telegram APIs
+- Frontend never controls expiry timing
+
+---
+
+## Endpoints
+
+| Endpoint                                 | Method | Purpose                     |
+| ---------------------------------------- | ------ | --------------------------- |
+| `/channels/telegram/connect/phone`       | POST   | Send login code             |
+| `/channels/telegram/connect/verify-code` | POST   | Verify login code           |
+| `/channels/telegram/connect/verify-2fa`  | POST   | Verify 2FA password         |
+| `/channels/telegram/connect/qr`          | POST   | Generate QR login session   |
+| `/channels/telegram/connect/qr/check`    | GET    | Poll QR session status      |
+| `/channels/telegram/disconnect`          | POST   | Disconnect Telegram account |
 
 ---
 
 ## Key Differences
 
-**OAuth Channels (Calendly, PayPal, Shopify, Stripe, Zoom, Facebook):**
+### OAuth Channels
 
-- Frontend only initiates auth and handles redirect
-- Backend manages OAuth callback and connection
-- Success: `?{channel}_connected=true`
-- Error: `?error=...`
+(Calendly, PayPal, Shopify, Stripe, Zoom, Facebook)
 
-**Telegram:**
+- Redirect-based authentication
+- Backend handles OAuth callbacks
+- Success via query params:
 
-- Multi-step authentication flow
-- Frontend calls connect endpoints directly
-- No OAuth redirect handling
+  - `?{channel}_connected=true`
+  - `?error=...`
+
+---
+
+### Telegram
+
+- No OAuth
+- Multi-step authentication
+- Frontend directly calls backend endpoints
+- QR login uses **MTProto updates**, not HTTP callbacks
+- Frontend polling is **state-only**
+
+---
