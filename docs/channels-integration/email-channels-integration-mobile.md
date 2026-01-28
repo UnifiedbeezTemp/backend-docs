@@ -1,5 +1,5 @@
 ---
-sidebar_position: 8
+sidebar_position: 1
 ---
 
 # Email OAuth Integration Guide for React Native
