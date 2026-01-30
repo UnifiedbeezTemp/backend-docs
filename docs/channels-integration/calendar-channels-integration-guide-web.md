@@ -12,7 +12,9 @@ sidebar_position: 4
 
 ```typescript
 const handleGoogleCalendarAuth = () => {
-  window.location.href = `${API_BASE}/channels/calendar/google/auth`;
+  const currentPath = window.location.pathname + window.location.search;
+  const encodedPath = encodeURIComponent(currentPath);
+  window.location.href = `${API_BASE}/google/auth?redirect_path=${encodedPath}`;
 };
 ```
 
@@ -82,7 +84,9 @@ await fetch(`${API_BASE}/channels/calendar/disconnect/google_calendar`, {
 
 ```typescript
 const handleMicrosoftCalendarAuth = () => {
-  window.location.href = `${API_BASE}/channels/calendar/microsoft/auth`;
+  const currentPath = window.location.pathname + window.location.search;
+  const encodedPath = encodeURIComponent(currentPath);
+  window.location.href = `${API_BASE}/microsoft/auth?redirect_path=${encodedPath}`;
 };
 ```
 

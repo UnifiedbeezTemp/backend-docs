@@ -18,7 +18,9 @@ Calendly uses OAuth 2.0 with backend-managed redirect flow. Frontend only needs 
 
 ```typescript
 const handleCalendlyAuth = () => {
-  window.location.href = `${API_BASE}/auth`;
+  const currentPath = window.location.pathname + window.location.search;
+  const encodedPath = encodeURIComponent(currentPath);
+  window.location.href = `${API_BASE}/auth?redirect_path=${encodedPath}`;
 };
 ```
 
@@ -74,7 +76,9 @@ const handleDisconnect = async (accountId: number) => {
 
 ```typescript
 const handlePayPalAuth = () => {
-  window.location.href = `${API_BASE}/auth`;
+  const currentPath = window.location.pathname + window.location.search;
+  const encodedPath = encodeURIComponent(currentPath);
+  window.location.href = `${API_BASE}/auth?redirect_path=${encodedPath}`;
 };
 ```
 
@@ -119,7 +123,11 @@ const handleShopifyAuth = () => {
     ? shopDomain
     : `${shopDomain}.myshopify.com`;
 
-  window.location.href = `${API_BASE}/auth?shop=${domain}`;
+  const currentPath = window.location.pathname + window.location.search;
+  const encodedPath = encodeURIComponent(currentPath);
+  window.location.href = `${API_BASE}/auth?shop=${encodeURIComponent(
+    shopDomain
+  )}&redirect_path=${encodedPath}`;
 };
 ```
 
@@ -162,7 +170,9 @@ Backend verifies HMAC signature before connecting.
 
 ```typescript
 const handleStripeAuth = () => {
-  window.location.href = `${API_BASE}/auth`;
+  const currentPath = window.location.pathname + window.location.searc;
+  const encodedPath = encodeURIComponent(currentPath);
+  window.location.href = `${API_BASE}/auth?redirect_path=${encodedPath}`;
 };
 ```
 
@@ -203,7 +213,9 @@ useEffect(() => {
 
 ```typescript
 const handleZoomAuth = () => {
-  window.location.href = `${API_BASE}/auth`;
+  const currentPath = window.location.pathname + window.location.search;
+  const encodedPath = encodeURIComponent(currentPath);
+  window.location.href = `${API_BASE}/auth?redirect_path=${encodedPath}`;
 };
 ```
 

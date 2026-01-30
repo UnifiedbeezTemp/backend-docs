@@ -12,7 +12,9 @@ sidebar_position: 3
 
 ```typescript
 const handleGmailAuth = () => {
-  window.location.href = `${API_BASE}/email/google/auth`;
+  const currentPath = window.location.pathname + window.location.search;
+  const encodedPath = encodeURIComponent(currentPath);
+  window.location.href = `${API_BASE}/google/auth?redirect_path=${encodedPath}`;
 };
 ```
 
@@ -69,7 +71,9 @@ await fetch(`${API_BASE}/email/disconnect/gmail`, {
 
 ```typescript
 const handleOutlookAuth = () => {
-  window.location.href = `${API_BASE}/email/microsoft/auth`;
+  const currentPath = window.location.pathname + window.location.search;
+  const encodedPath = encodeURIComponent(currentPath);
+  window.location.href = `${API_BASE}/microsoft/auth?redirect_path=${encodedPath}`;
 };
 ```
 
