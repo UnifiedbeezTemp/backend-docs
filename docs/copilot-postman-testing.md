@@ -213,7 +213,7 @@ Authorization: Bearer {token}
   "inputType": "selection",
   "content": "Invite Later",
   "metadata": {
-    "substepId": "inviteTeam",
+    "substepId": "inviteTeamLater",
     "selectedOption": "inviteLater"
   }
 }

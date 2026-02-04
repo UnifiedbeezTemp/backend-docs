@@ -2,6 +2,8 @@
 sidebar_position: 10
 ---
 
+# OLD GUIDE - THIS IS DEPRECATED, USE [NEW GUIDE](./new-copilot-integration)
+
 # Copilot Onboarding - Frontend Integration Guide
 
 ## Base URL
