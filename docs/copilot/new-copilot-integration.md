@@ -1,3 +1,9 @@
+---
+sidebar_position: 1
+---
+
+# New Copilot Onboarding - Frontend Integration Guide
+
 # Section A: Normal Flow API Reference
 
 ## Core Endpoints

@@ -1,3 +1,7 @@
+---
+sidebar_position: 2
+---
+
 # Copilot Edit Flow Documentation
 
 ## Section A: Edit API Reference
