@@ -1,8 +1,4 @@
----
-sidebar_position: 12
----
-
-# Copilot Business Identity Step Testing Guide
+# Updated Copilot Testing Guide
 
 ## Prerequisites
 
@@ -10,7 +6,9 @@ sidebar_position: 12
 - Auth token from login
 - User ID from session
 
-## Test Flow Structure
+---
+
+## Business Identity Section
 
 ### 1. Start Conversation
 
@@ -19,594 +17,235 @@ POST /copilot/start
 Authorization: Bearer {token}
 ```
 
-**Expected Response:**
-
-- Current substep: `planConfirmation`
-- Bot message with plan summary component
-- 2 options: Proceed or Change plan
+**Expected:** `planConfirmation` substep with 2 options
 
 ---
 
-### 2. Plan Confirmation - Proceed Path
+### 2. Plan Confirmation
 
-**2a. Confirm Plan (Yes)**
+**Proceed with current plan:**
 
-```http
-POST /copilot/message
-Content-Type: application/json
-
+```json
 {
   "inputType": "selection",
   "content": "Yes, Proceed with my current plan",
   "metadata": {
+    "substepId": "planConfirmation",
     "selectedOption": true
   }
 }
 ```
 
-**Expected Response:**
+**Change plan:**
 
-- Current substep: `businessIndustry`
-- Industry selection grid (11 options + "not listed")
-
----
-
-### 3. Plan Change Path (Alternative)
-
-**3a. Request Plan Change**
-
-```http
-POST /copilot/message
-
+```json
 {
   "inputType": "selection",
   "content": "No, Change plan",
   "metadata": {
+    "substepId": "planConfirmation",
     "selectedOption": false
   }
 }
 ```
 
-**Expected Response:**
-
-- Current substep: `changePlan`
-- Plans preview component
-
-**3b. Execute Plan Change**
-
-```http
-POST /copilot/change-plan
-
-{
-  "newPlan": "BUSINESS"
-}
-```
-
-**Expected Response:**
-
-- Returns to appropriate substep with updated plan context
-
 ---
 
-### 4. Business Industry Selection
+### 3. Business Industry
 
-**4a. Select Listed Industry**
+**Select listed industry:**
 
-```http
-POST /copilot/message
-
+```json
 {
   "inputType": "selection",
   "content": "E-commerce / Retail",
   "metadata": {
+    "substepId": "businessIndustry",
     "selectedOption": "ECOMMERCE_RETAIL"
   }
 }
 ```
 
-**Expected Response:**
+**Select "Not Listed":**
 
-- Current substep: `businessName`
-- Prompt for business name input
-
-**4b. Select "Not Listed"**
-
-```http
-POST /copilot/message
-
+```json
 {
   "inputType": "selection",
   "content": "Category not listed here",
   "metadata": {
+    "substepId": "businessIndustry",
     "selectedOption": "none"
   }
 }
 ```
 
-**Expected Response:**
-
-- Current substep: `categoryNotListed`
-- Text input prompt
-
 ---
 
-### 5. Category Not Listed Flow
+### 4. Category Not Listed
 
-**5a. Enter Custom Industry**
-
-```http
-POST /copilot/message
-
+```json
 {
   "inputType": "text",
   "content": "Pet grooming services",
   "metadata": {
-    "formField": "industry"
+    "substepId": "categoryNotListed"
   }
 }
 ```
 
-**Expected Response:**
-
-- AI suggests industry category
-- Advances to `businessName`
-
 ---
 
-### 6. Business Name Entry
+### 5. Business Name
 
-**6a. Enter Business Name**
-
-```http
-POST /copilot/message
-
+```json
 {
   "inputType": "text",
   "content": "Pawfect Grooming",
   "metadata": {
-    "formField": "businessName"
+    "substepId": "businessName"
   }
 }
 ```
 
-**Expected Response:**
-
-- Current substep: `selectBusinessNameMatch`
-- List of matching businesses + "not listed" option
-
 ---
 
-### 7. Business Match Selection
+### 6. Business Match Selection
 
-**7a. Select Matched Business**
+**Select matched business:**
 
-```http
-POST /copilot/message
-
+```json
 {
   "inputType": "selection",
-  "content": "Private Dog Grooming in Bellevue — Serving Seattle Area | Pawfect Grooming",
+  "content": "Pawfect Grooming - Seattle",
   "metadata": {
+    "substepId": "selectBusinessNameMatch",
     "selectedOption": {
-      "name": "Private Dog Grooming in Bellevue — Serving Seattle Area | Pawfect Grooming",
+      "name": "Pawfect Grooming",
       "website": "https://pawfectgrooming.org/",
       "phone": "(425) 502-5135",
-      "logo_url": "https://pawfectgrooming.org/images/pawfect.png",
-      "source": "google_search",
-      "confidence": 0.8
+      "logo_url": "https://pawfectgrooming.org/images/pawfect.png"
     }
   }
 }
 ```
 
-**Expected Response:**
-
-- Current substep: `confirmBusinessData`
-- Business details + AI-generated goals
-- Section complete flag: `true`
-
-**Continue to next step (team member)**
+**Business not listed:**
 
 ```json
 {
   "inputType": "selection",
-  "content": "Continue",
-  "metadata": {
-    "selectedOption": "continue"
-  }
-}
-```
-
-**7b. Select "Not Listed"**
-
-```http
-POST /copilot/message
-
-{
-  "inputType": "selection",
   "content": "My business isn't listed",
   "metadata": {
+    "substepId": "selectBusinessNameMatch",
     "selectedOption": ""
   }
 }
 ```
 
-**Expected Response:**
-
-- Current substep: `businessNotListed`
-- Logo upload component
-
 ---
 
-### 8. Business Not Listed - Logo Upload
+### 7. Confirm Business Data
 
-**8a. Upload Logo** (Custom handling required)
-
-```http
-POST /copilot/message
-
+```json
 {
-  "inputType": "custom",
-  "content": "logo_uploaded",
+  "inputType": "selection",
+  "content": "Confirm",
   "metadata": {
-    "logoUrl": "s3://bucket/user-123/logo.png"
+    "substepId": "confirmBusinessData",
+    "selectedOption": "confirm"
   }
 }
 ```
 
-**Expected Response:**
-
-- Section complete
-- Advances to next section: `teamMembers`
-
 ---
 
-## Edit Flow Tests
+## Team Members Section
 
-### 9. Edit Business Industry
+### 8. Team Size
 
-**9a. Request Edit**
-
-```http
-POST /copilot/edit/businessIndustry
-
-{
-  "newValue": "HEALTHCARE_CLINICS"
-}
-```
-
-**Expected Response:**
-
-- Updated `collected_data.industry`
-- If dependent steps exist, returns first affected step
-- Otherwise, returns current position
-
----
-
-### 10. Skip Flow Tests
-
-**10a. Skip Business Industry**
-
-```http
-POST /copilot/skip
-
-{
-  "substepId": "businessIndustry"
-}
-```
-
-**Expected Response:**
-
-- Substep marked as skipped
-- System event recorded
-- Advances to next available substep
-
----
-
-## State Management Tests
-
-### 11. Get Current State
-
-```http
-GET /copilot/state
-```
-
-**Expected Response:**
-
-```json
-{
-  "conversationId": 123,
-  "currentSection": "businessIdentity",
-  "currentSubstep": "planConfirmation",
-  "sessionState": {
-    "current_section": "businessIdentity",
-    "current_substep": "planConfirmation",
-    "completed_substeps": [],
-    "completed_sections": [],
-    "skipped_substeps": [],
-    "collected_data": {},
-    "edit_history": []
-  },
-  "recentMessages": [...],
-  "currentSubstepDetails": {...}
-}
-```
-
----
-
-### 12. Restart Conversation
-
-```http
-POST /copilot/restart
-```
-
-**Expected Response:**
-
-- New conversation created
-- Previous marked inactive
-- Returns to `planConfirmation`
-
----
-
-## Validation Tests
-
-### 13. Invalid Input Handling
-
-**13a. Wrong Input Type**
-
-```http
-POST /copilot/message
-
-{
-  "inputType": "text",
-  "content": "some text",
-  "metadata": {}
-}
-```
-
-On a choice substep - should return error
-
-**13b. Missing Required Selection**
-
-```http
-POST /copilot/message
-
-{
-  "inputType": "selection",
-  "content": "",
-  "metadata": {}
-}
-```
-
-**Expected Response:** 400 error - "Selection required"
-
----
-
-## Test Execution Order
-
-1. Start → Plan Confirmation → Yes → Industry → Name → Match → Confirm ✅
-2. Start → Plan Change → Select New Plan → Industry → ... ✅
-3. Start → Industry → Not Listed → Custom → Name → ... ✅
-4. Mid-flow: Edit Industry → Verify state update ✅
-5. Mid-flow: Skip substep → Verify skip logic ✅
-6. Restart conversation → Verify reset ✅
-
-Each path should validate:
-
-- Correct substep transitions
-- Proper data persistence in `collected_data`
-- Message history recording
-- UI directive components
-- Error handling
-
-# Team Members Section - Postman Test Flow
-
-## Prerequisites
-
-Complete `businessIdentity` section and be at `teamSize` substep.
-
----
-
-## Test 1: Team Size Selection - "Just Me"
-
-**POST** `/api/v1/copilot/message`
+**Just me:**
 
 ```json
 {
   "inputType": "selection",
   "content": "Just Me",
   "metadata": {
+    "substepId": "teamSize",
     "selectedOption": "1"
   }
 }
 ```
 
-**Expected:** Advance to `inviteTeamLater` substep
-
----
-
-## Test 2: Team Size Selection - "2-5"
-
-**POST** `/api/v1/copilot/message`
+**2-5 members:**
 
 ```json
 {
   "inputType": "selection",
   "content": "2-5",
   "metadata": {
+    "substepId": "teamSize",
     "selectedOption": "2-5"
   }
 }
 ```
 
-**Expected:** Advance to `inviteTeam` substep
-
----
-
-## Test 3: Invite Team - "Invite Now" (Exit Option)
-
-At `inviteTeam` substep:
-
-```json
-{
-  "inputType": "selection",
-  "content": "Invite Now",
-  "metadata": {
-    "selectedOption": "inviteNow"
-  }
-}
-```
-
-**Expected:** Handle `isExitOption: true` - should trigger special flow or stay on current substep
-
----
-
-## Test 4: Invite Team - "Invite Later"
-
-At `inviteTeam` substep:
-
-```json
-{
-  "inputType": "selection",
-  "content": "Invite Later",
-  "metadata": {
-    "selectedOption": "inviteLater"
-  }
-}
-```
-
-**Expected:** Advance to `inviteTeamLater` (end of section)
-
----
-
-## Test 5: Complete Section from inviteTeamLater
-
-At `inviteTeamLater` (has `isEndOfStep: true`):
-
-```json
-{
-  "inputType": "selection",
-  "content": "Continue",
-  "metadata": {
-    "selectedOption": "continue"
-  }
-}
-```
-
-**Expected:**
-
-- Mark `teamMembers` section complete
-- Advance to `channels` section with entry substep
-
----
-
-## Test 6: Plan Validation - Exceeds Limit
-
-Restart and select team size exceeding plan limit:
+**21+ (triggers upgrade):**
 
 ```json
 {
   "inputType": "selection",
   "content": "21 or more",
   "metadata": {
+    "substepId": "teamSize",
     "selectedOption": "21"
   }
 }
 ```
 
-**Expected:**
+---
 
-- `showPlanUpgrade: true` in `uiDirectives`
-- `suggestedPlan` returned
-- Stay on `teamSize` substep
+### 9. Invite Team
+
+**Invite later:**
+
+```json
+{
+  "inputType": "selection",
+  "content": "Invite Later",
+  "metadata": {
+    "substepId": "inviteTeam",
+    "selectedOption": "inviteLater"
+  }
+}
+```
 
 ---
 
-## Verification Checklist
+## Channels Section
 
-After each test, call **GET** `/api/v1/copilot/state` and verify:
-
-- `completed_substeps` includes previous substeps
-- `current_substep` matches expected
-- `current_section` is `"teamMembers"` (or `"channels"` if section complete)
-- `collected_data.team_size` stored correctly
-- `botMessage` properly interpolated
-- `completed_sections` includes `"teamMembers"` after final step
-
-# Testing Channels → AI Assistant Flow
-
-## Prerequisites
-
-- Active user session with valid JWT token
-- User has selected a plan during onboarding
-- User has completed businessIdentity section
-
-## Step 1: Start/Resume Conversation
-
-**GET** `/copilot/state`
-
-Headers:
-
-```
-Authorization: Bearer {your_jwt_token}
-```
-
-**Expected Response:**
+### 10. Select Channels
 
 ```json
 {
-  "currentSection": "channels",
-  "currentSubstep": "channels",
-  "sessionState": {
-    "collected_data": {
-      "industry": "ECOMMERCE_RETAIL",
-      "selected_plan": "BUSINESS"
-    }
-  }
-}
-```
-
-## Step 2: Select Channels
-
-**POST** `/copilot/message`
-
-Body:
-
-```json
-{
-  "content": "WhatsApp Business, Email, SMS",
-  "inputType": "choice",
+  "inputType": "selection",
+  "content": "WhatsApp, Gmail, Webchat",
   "metadata": {
     "substepId": "channels",
-    "selectedOptions": ["whatsapp", "gmail", "twilio_sms"]
+    "selectedOptions": ["whatsapp", "gmail", "webchat"]
   }
 }
 ```
 
-**Expected Response:**
+---
+
+### 11. Confirm Channel Configuration
+
+**Use recommended:**
 
 ```json
 {
-  "currentSubstep": {
-    "id": "confirmChannelsConfiguration",
-    "botMessage": "Great! I've noted these channels: WhatsApp Business, Gmail, Twilio SMS..."
-  },
-  "lastUserMessage": {
-    "content": "WhatsApp Business, Gmail, Twilio SMS"
-  }
-}
-```
-
-## Step 3: Choose Settings Strategy
-
-**POST** `/copilot/message`
-
-Body (for recommended):
-
-```json
-{
+  "inputType": "selection",
   "content": "Use recommended settings",
-  "inputType": "choice",
   "metadata": {
     "substepId": "confirmChannelsConfiguration",
     "selectedOption": true
@@ -614,12 +253,12 @@ Body (for recommended):
 }
 ```
 
-Or (for manual):
+**Configure now:**
 
 ```json
 {
+  "inputType": "selection",
   "content": "Configure now",
-  "inputType": "choice",
   "metadata": {
     "substepId": "confirmChannelsConfiguration",
     "selectedOption": false
@@ -627,28 +266,16 @@ Or (for manual):
 }
 ```
 
-**Expected Response:**
+---
+
+## Fallback Logic Section
+
+### 12. No Reply Configuration
 
 ```json
 {
-  "currentSubstep": {
-    "id": "noReplyConfiguration",
-    "parentStepId": "fallbackLogic"
-  },
-  "sectionComplete": true
-}
-```
-
-## Step 4: Select Fallback Behavior
-
-**POST** `/copilot/message`
-
-Body:
-
-```json
-{
+  "inputType": "selection",
   "content": "Escalate to someone else",
-  "inputType": "choice",
   "metadata": {
     "substepId": "noReplyConfiguration",
     "selectedOption": "escalate"
@@ -656,27 +283,14 @@ Body:
 }
 ```
 
-**Expected Response:**
+---
+
+### 13. Confirm No Reply
 
 ```json
 {
-  "currentSubstep": {
-    "id": "confirmNoReplyConfiguration",
-    "botMessage": "Okay, I'll escalate if no one replies."
-  }
-}
-```
-
-## Step 5: Confirm Fallback Config
-
-**POST** `/copilot/message`
-
-Body:
-
-```json
-{
-  "content": "Continue to next step",
-  "inputType": "choice",
+  "inputType": "selection",
+  "content": "Continue",
   "metadata": {
     "substepId": "confirmNoReplyConfiguration",
     "selectedOption": true
@@ -684,28 +298,18 @@ Body:
 }
 ```
 
-**Expected Response:**
+---
+
+## AI Assistant Section
+
+### 14. Assistant Strategy
+
+**Multiple assistants:**
 
 ```json
 {
-  "currentSubstep": {
-    "id": "aiAssistantsForChannels",
-    "parentStepId": "aiAssistant"
-  },
-  "sectionComplete": true
-}
-```
-
-## Step 6: Choose Assistant Strategy
-
-**POST** `/copilot/message`
-
-Body (for multiple):
-
-```json
-{
+  "inputType": "selection",
   "content": "Multiple Assistants by Channel",
-  "inputType": "choice",
   "metadata": {
     "substepId": "aiAssistantsForChannels",
     "selectedOption": "multiple"
@@ -713,101 +317,46 @@ Body (for multiple):
 }
 ```
 
-**Expected Response:**
+**Single assistant:**
 
 ```json
 {
-  "currentSubstep": {
-    "id": "beezaroAssistants",
-    "botMessage": "...we have selected 3 Beezaro assistants..."
-  }
-}
-```
-
-## Step 7: Confirm Assistant Creation
-
-**POST** `/copilot/message`
-
-Body:
-
-```json
-{
-  "content": "Confirm",
-  "inputType": "button",
+  "inputType": "selection",
+  "content": "Single Assistant",
   "metadata": {
-    "substepId": "beezaroAssistants"
+    "substepId": "aiAssistantsForChannels",
+    "selectedOption": "single"
   }
 }
 ```
 
-**Expected Response:**
+---
+
+### 15. Confirm Assistants
 
 ```json
 {
-  "currentSubstep": {
-    "id": "addAutomations",
-    "parentStepId": "automation"
-  },
-  "sectionComplete": true
+  "inputType": "selection",
+  "content": "Confirm",
+  "metadata": {
+    "substepId": "beezaroAssistants",
+    "selectedOption": "confirm"
+  }
 }
 ```
 
-## Verification Queries
+---
 
-**Check created assistants:**
+## Automation Section
 
-```sql
-SELECT * FROM ai_assistants WHERE user_id = {userId};
-```
+### 16. Add Automations
 
-**Check channel configs:**
-
-```sql
-SELECT cac.*, cc.channel_name, aa.name as assistant_name
-FROM channel_ai_configs cac
-JOIN connected_channels cc ON cc.id = cac.connected_channel_id
-JOIN ai_assistants aa ON aa.id = cac.ai_assistant_id
-WHERE cc.user_id = {userId};
-```
-
-**Check recommendations applied:**
-
-```sql
-SELECT * FROM escalation_keywords WHERE channel_ai_config_id IN (
-  SELECT id FROM channel_ai_configs WHERE is_recommendation = true
-);
-```
-
-# Testing Automation Step in Postman
-
-## Prerequisites
-
-- Completed AI Assistant step
-- Active conversation with JWT token
-
-## Step 1: Verify Current State
-
-**GET** `/copilot/state`
-
-**Expected Response:**
+**With sub-selections:**
 
 ```json
 {
-  "currentSection": "automation",
-  "currentSubstep": "addAutomations"
-}
-```
-
-## Step 2: Select Automations
-
-**POST** `/copilot/message`
-
-Body:
-
-```json
-{
+  "inputType": "selection",
   "content": "Yes, add automation",
-  "inputType": "choice",
   "metadata": {
     "substepId": "addAutomations",
     "selectedOption": true,
@@ -820,27 +369,27 @@ Body:
 }
 ```
 
-**Expected Response:**
+**Skip automations:**
 
 ```json
 {
-  "currentSubstep": {
-    "id": "confirmAIAutomations",
-    "botMessage": "Great, I'll add these automations: Tag new leads, Auto-respond after hours, Follow-up after 24h"
+  "inputType": "selection",
+  "content": "No, skip",
+  "metadata": {
+    "substepId": "addAutomations",
+    "selectedOption": false
   }
 }
 ```
 
-## Step 3: Confirm Automations
+---
 
-**POST** `/copilot/message`
-
-Body:
+### 17. Confirm Automations
 
 ```json
 {
+  "inputType": "selection",
   "content": "Confirm and continue",
-  "inputType": "choice",
   "metadata": {
     "substepId": "confirmAIAutomations",
     "selectedOption": true
@@ -848,40 +397,144 @@ Body:
 }
 ```
 
-**Expected Response:**
+---
 
-```json
+## Edit Flow
+
+### 18. Edit Industry
+
+```http
+POST /copilot/edit
+
 {
-  "currentSubstep": null,
-  "conversationComplete": true
+  "substepId": "businessIndustry",
+  "newValue": "HEALTHCARE_CLINICS"
 }
 ```
 
-## Verification Queries
+---
 
-**Check created campaign:**
+## Validation Test Cases
 
-```sql
-SELECT * FROM unified_campaigns
-WHERE user_id = {userId}
-AND name = 'Copilot Onboarding Automations';
+### ❌ Missing substepId (should fail)
+
+```json
+{
+  "inputType": "text",
+  "content": "Pawfect Grooming",
+  "metadata": {
+    "formField": "businessName"
+  }
+}
 ```
 
-**Check automations:**
+**Expected:** 400 - "substepId required in metadata"
 
-```sql
-SELECT a.*, c.name as campaign_name
-FROM automations a
-JOIN unified_campaigns c ON c.id = a.campaign_id
-WHERE c.user_id = {userId};
+---
+
+### ❌ Wrong substepId (should fail)
+
+```json
+{
+  "inputType": "selection",
+  "content": "E-commerce",
+  "metadata": {
+    "substepId": "wrongStep",
+    "selectedOption": "ECOMMERCE"
+  }
+}
 ```
 
-**Check automation steps:**
+**Expected:** 400 - "Invalid substep context"
 
-```sql
-SELECT * FROM automation_steps
-WHERE automation_id IN (
-  SELECT id FROM automations WHERE user_id = {userId}
-)
-ORDER BY automation_id, step_order;
+---
+
+### ❌ Invalid option (should fail)
+
+```json
+{
+  "inputType": "selection",
+  "content": "Invalid",
+  "metadata": {
+    "substepId": "businessIndustry",
+    "selectedOption": "INVALID_INDUSTRY"
+  }
+}
 ```
+
+**Expected:** 400 - "Invalid option"
+
+---
+
+### ❌ Missing sub-selections (should fail)
+
+```json
+{
+  "inputType": "selection",
+  "content": "Yes",
+  "metadata": {
+    "substepId": "addAutomations",
+    "selectedOption": true
+  }
+}
+```
+
+**Expected:** 400 - "Please select at least one automation type"
+
+---
+
+### ❌ Empty text input (should fail)
+
+```json
+{
+  "inputType": "text",
+  "content": "   ",
+  "metadata": {
+    "substepId": "businessName"
+  }
+}
+```
+
+**Expected:** 400 - "Input cannot be empty"
+
+---
+
+### ❌ Exceeds channel limits (should fail)
+
+```json
+{
+  "inputType": "selection",
+  "content": "Multiple WhatsApp",
+  "metadata": {
+    "substepId": "channels",
+    "selectedOptions": ["whatsapp", "whatsapp_business", "whatsapp_api"]
+  }
+}
+```
+
+**Expected:** 400 - Plan limit exceeded
+
+---
+
+## State Management
+
+### Get Current State
+
+```http
+GET /copilot/state
+```
+
+### Restart Conversation
+
+```http
+POST /copilot/restart
+```
+
+---
+
+## Notes
+
+- All selection/choice inputs require `substepId` in metadata
+- Text inputs require `substepId` but NOT `formField`
+- Sub-selections require `subSelectValues` array
+- Multiple selections use `selectedOptions`, single uses `selectedOption`
