@@ -129,6 +129,26 @@ Response: CopilotResponseDto
     // Not editable via JSON edit endpoint
   }
 }
+
+// Multiple choice with sub-select:
+{
+  addAutomations: {
+    newValue: "yes" | "false",         // Parent selection
+    subSelectValues: string[],         // Required when newValue === "yes"
+    validation: "If 'yes', subSelectValues must contain at least one automation type",
+    examples: [
+      {
+        // Skip automations
+        newValue: "false"
+      },
+      {
+        // Select specific automations
+        newValue: "yes",
+        subSelectValues: ["Tag new leads", "Follow-up after 24h"]
+      }
+    ]
+  }
+}
 ```
 
 ### Edit Response Patterns
@@ -465,6 +485,55 @@ POST /copilot/edit/confirmChannelsConfiguration
 // Frontend action:
 // - Navigate to /channels/configure (manual setup UI)
 // - Conversation remains active (user can return to copilot later via restart)
+
+#### Pattern 7: Edit with Sub-Select Values
+
+// Current position: automation/finalizeSetup
+// User edits: addAutomations to add different automations
+
+// Request:
+POST /copilot/edit/addAutomations
+{
+  substepId: "addAutomations",
+  newValue: "yes",
+  subSelectValues: ["Tag new leads", "Auto-respond after hours"]
+}
+
+// Response:
+{
+  currentSubstep: {
+    id: "confirmAIAutomations",          // Navigated to confirmation
+    botMessage: [
+      {
+        type: "text",
+        message: "Updated automation selections: Tag new leads, Auto-respond after hours."
+      },
+      {
+        type: "text",
+        message: "Great, I'll add these automations: Tag new leads, Auto-respond after hours"
+      }
+    ]
+  },
+  uiDirectives: {
+    isInEditFlow: false,                 // Same section
+    editComplete: false,                 // Must re-confirm
+    components: []
+  }
+}
+
+// Backend actions:
+// 1. Updated selected_automations in collected_data
+// 2. Cleared confirmAIAutomations from completed_substeps
+// 3. Navigated to confirmAIAutomations
+// 4. User must re-confirm (triggers automation creation)
+
+// To skip instead:
+POST /copilot/edit/addAutomations
+{
+  substepId: "addAutomations",
+  newValue: "false"
+  // No subSelectValues needed
+}
 ```
 
 ### Edit-Specific Endpoints
@@ -1025,6 +1094,14 @@ export const EDIT_IMPACT_MAP: Record<string, EditImpact> = {
     clearedFields: [], // Dynamically determined based on revalidation
     customHandler: "handlePlanChange",
     reason: "Plan change triggers comprehensive revalidation",
+  },
+
+  // Automations section
+  addAutomations: {
+    affectedSubsteps: ["confirmAIAutomations"],
+    clearedFields: ["selected_automations"],
+    customHandler: "handleAddAutomationsEdit",
+    reason: "Automation changes require re-confirmation before creation",
   },
 };
 
