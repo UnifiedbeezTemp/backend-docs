@@ -231,4 +231,3 @@ Required configuration:
 - Subsequent logins: Only email in ID token
 - Backend persists user info on first signup
 - State parameter differentiates signup vs login
-  </document>
