@@ -1,5 +1,5 @@
 ---
-sidebar_position: 13
+sidebar_position: 4
 ---
 
 # 🔐 Two-Factor Authentication (2FA) – Frontend Integration Guide
