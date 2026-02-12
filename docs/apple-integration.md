@@ -6,7 +6,7 @@ sidebar_position: 5
 
 ## Overview
 
-Apple Sign In uses OAuth2 authorization code flow with server-side token exchange.
+Apple Sign In uses OAuth2 authorization code flow with server-side token exchange and redirect-based authentication.
 
 ## Frontend Implementation
 
@@ -29,6 +29,16 @@ export const appleAuthConfig = {
   clientId: import.meta.env.VITE_APPLE_CLIENT_ID,
   redirectURI: import.meta.env.VITE_APPLE_REDIRECT_URI, // Backend callback URL
   scope: "name email",
+  getState: (redirectPath: string = "/auth/callback") => {
+    // Encode full frontend redirect URL in state
+    const fullRedirectUrl = `${window.location.origin}${redirectPath}`;
+    return btoa(
+      JSON.stringify({
+        redirect_url: fullRedirectUrl,
+        mode: redirectPath.includes("signup") ? "signup" : "login",
+      })
+    );
+  },
 };
 ```
 
@@ -36,7 +46,7 @@ export const appleAuthConfig = {
 
 ```env
 VITE_APPLE_CLIENT_ID=com.yourcompany.yourapp.service
-VITE_APPLE_REDIRECT_URI=https://yourdomain.com/api/v1/auth/apple/callback
+VITE_APPLE_REDIRECT_URI=https://api.yourdomain.com/api/v1/auth/apple/callback
 ```
 
 ### 3. Sign In Component
@@ -47,6 +57,7 @@ import { appleAuthConfig } from "../config/appleAuth";
 
 interface AppleAuthProps {
   mode: "signup" | "login";
+  redirectPath?: string; // Optional custom redirect after auth
 }
 
 declare global {
@@ -55,7 +66,10 @@ declare global {
   }
 }
 
-export const AppleAuth: React.FC<AppleAuthProps> = ({ mode }) => {
+export const AppleAuth: React.FC<AppleAuthProps> = ({
+  mode,
+  redirectPath = "/auth/callback",
+}) => {
   useEffect(() => {
     const script = document.createElement("script");
     script.src =
@@ -67,8 +81,8 @@ export const AppleAuth: React.FC<AppleAuthProps> = ({ mode }) => {
           clientId: appleAuthConfig.clientId,
           scope: appleAuthConfig.scope,
           redirectURI: appleAuthConfig.redirectURI,
-          state: mode, // Pass signup/login mode
-          usePopup: false, // Use redirect flow
+          state: appleAuthConfig.getState(redirectPath),
+          usePopup: false,
         });
       }
     };
@@ -79,7 +93,7 @@ export const AppleAuth: React.FC<AppleAuthProps> = ({ mode }) => {
         document.head.removeChild(script);
       }
     };
-  }, [mode]);
+  }, [redirectPath]);
 
   const handleAppleAuth = async () => {
     try {
@@ -87,7 +101,7 @@ export const AppleAuth: React.FC<AppleAuthProps> = ({ mode }) => {
         throw new Error("Apple ID SDK not loaded");
       }
 
-      // Redirects to Apple, then back to redirectURI
+      // Redirects to Apple, then to backend callback, then to frontend
       await window.AppleID.auth.signIn();
     } catch (error) {
       console.error("Apple auth error:", error);
@@ -137,7 +151,6 @@ export const AuthCallback: React.FC = () => {
       // Auth successful, session cookie set by backend
       navigate("/dashboard");
     } else if (error) {
-      // Show error message
       console.error("Auth error:", error);
       navigate("/login?error=" + encodeURIComponent(error));
     }
@@ -161,7 +174,7 @@ function LoginPage() {
   return (
     <div>
       <h1>Login</h1>
-      <AppleAuth mode="login" />
+      <AppleAuth mode="login" redirectPath="/dashboard" />
     </div>
   );
 }
@@ -170,9 +183,84 @@ function SignupPage() {
   return (
     <div>
       <h1>Sign Up</h1>
-      <AppleAuth mode="signup" />
+      <AppleAuth mode="signup" redirectPath="/onboarding" />
     </div>
   );
+}
+```
+
+## Backend Implementation
+
+### Apple Callback Endpoint
+
+```typescript
+@Post("apple/callback")
+async appleCallback(
+  @Body() body: { code: string; id_token: string; state?: string; user?: string },
+  @Res() res: Response
+) {
+  try {
+    let redirectUrl = `${process.env.FRONTEND_URL}/auth/callback`;
+
+    // Parse state to get frontend redirect URL
+    if (body.state) {
+      try {
+        const stateData = JSON.parse(
+          Buffer.from(body.state, 'base64').toString('utf-8')
+        );
+
+        if (stateData.redirect_url) {
+          const url = new URL(stateData.redirect_url);
+
+          // Security: Validate origin
+          const isAllowed =
+            url.hostname.endsWith('.unifiedbeez.com') ||
+            url.hostname === 'unifiedbeez.com' ||
+            url.hostname === 'localhost' ||
+            url.hostname === '127.0.0.1';
+
+          if (isAllowed) {
+            redirectUrl = stateData.redirect_url;
+          }
+        }
+      } catch (e) {
+        // Invalid state, use default
+      }
+    }
+
+    const authData = {
+      provider: "apple" as const,
+      auth_code: body.code,
+      device_info: {
+        device_name: "web",
+        device_type: "web",
+        user_agent: undefined,
+        ip_address: undefined,
+      },
+    };
+
+    // Determine signup vs login from user field
+    const isSignup = !!body.user;
+    const result = isSignup
+      ? await this.authService.socialSignup(authData)
+      : await this.authService.socialLogin(authData);
+
+    if (result.session_id) {
+      res.cookie("session_id", result.session_id, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        path: "/",
+      });
+    }
+
+    res.redirect(`${redirectUrl}?success=true`);
+  } catch (error) {
+    res.redirect(
+      `${process.env.FRONTEND_URL}/auth/callback?error=${encodeURIComponent(error.message)}`
+    );
+  }
 }
 ```
 
@@ -181,7 +269,7 @@ function SignupPage() {
 ```
 1. User clicks "Sign in with Apple"
    ↓
-2. Frontend calls AppleID.auth.signIn()
+2. Frontend calls AppleID.auth.signIn() with state containing redirect URL
    ↓
 3. Redirects to Apple's auth page
    ↓
@@ -189,9 +277,14 @@ function SignupPage() {
    ↓
 5. Apple redirects to backend: POST /api/v1/auth/apple/callback
    ↓
-6. Backend exchanges code for tokens, creates session
+6. Backend:
+   - Parses state to get frontend redirect URL
+   - Validates origin (*.unifiedbeez.com)
+   - Exchanges code for tokens
+   - Creates session
+   - Sets httpOnly cookie
    ↓
-7. Backend redirects to: /auth/callback?success=true
+7. Backend redirects to frontend URL from state: {origin}{redirectPath}?success=true
    ↓
 8. Frontend callback page handles success/error
    ↓
@@ -200,10 +293,27 @@ function SignupPage() {
 
 ## Session Management
 
-- Session is managed via **httpOnly cookie** (set by backend)
-- No need to handle tokens in frontend
-- Cookie is automatically sent with API requests
+- Session managed via **httpOnly cookie** (set by backend)
+- No tokens exposed to frontend
+- Cookie automatically sent with API requests
 - Cookie settings: `httpOnly`, `secure`, `sameSite=none`
+
+## Custom Redirect Paths
+
+Frontend can specify where to redirect after auth:
+
+```typescript
+// Redirect to onboarding after signup
+<AppleAuth mode="signup" redirectPath="/onboarding" />
+
+// Redirect to dashboard after login
+<AppleAuth mode="login" redirectPath="/dashboard" />
+
+// Default: /auth/callback
+<AppleAuth mode="login" />
+```
+
+Backend extracts and validates the full URL from state parameter.
 
 ## Error Handling
 
@@ -213,21 +323,20 @@ Backend redirects to callback with error query param:
 /auth/callback?error=Authentication%20failed
 ```
 
-Handle in callback page and show appropriate message to user.
+Handle in callback page and show appropriate message.
 
 ## Apple Developer Console Setup
 
-Required configuration:
-
 1. **App ID** - Enable Sign in with Apple capability
 2. **Services ID** - Create with your client ID
-3. **Return URLs** - Add backend callback URL
+3. **Return URLs** - Add backend callback URL (e.g., `https://api.yourdomain.com/api/v1/auth/apple/callback`)
 4. **Domain verification** - Verify your domain
 5. **Private Key** - Create for token signing (backend uses this)
 
-## Notes
+## Security Notes
 
-- First-time users: Apple returns user name in response
+- Backend validates redirect URLs against allowed origins (`*.unifiedbeez.com`, localhost)
+- State parameter base64-encoded to pass redirect URL safely
+- Open redirect attacks prevented by origin validation
+- First-time users: Apple returns user name
 - Subsequent logins: Only email in ID token
-- Backend persists user info on first signup
-- State parameter differentiates signup vs login
