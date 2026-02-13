@@ -1,12 +1,8 @@
----
-sidebar_position: 5
----
-
 # Apple Sign In Integration Guide
 
 ## Overview
 
-Apple Sign In uses OAuth2 authorization code flow with server-side token exchange and redirect-based authentication.
+Apple Sign In uses OAuth2 authorization code flow with server-side token exchange and redirect-based authentication. The flow explicitly distinguishes between signup and login via the `state` parameter, ensuring proper handling even when Apple doesn't return user information on subsequent attempts.
 
 ## Frontend Implementation
 
@@ -29,13 +25,16 @@ export const appleAuthConfig = {
   clientId: import.meta.env.VITE_APPLE_CLIENT_ID,
   redirectURI: import.meta.env.VITE_APPLE_REDIRECT_URI, // Backend callback URL
   scope: "name email",
-  getState: (redirectPath: string = "/auth/callback") => {
-    // Encode full frontend redirect URL in state
+  getState: (
+    redirectPath: string = "/auth/callback",
+    mode: "signup" | "login"
+  ) => {
+    // Encode full frontend redirect URL and auth mode in state
     const fullRedirectUrl = `${window.location.origin}${redirectPath}`;
     return btoa(
       JSON.stringify({
         redirect_url: fullRedirectUrl,
-        mode: redirectPath.includes("signup") ? "signup" : "login",
+        mode: mode, // Explicitly specify signup or login
       })
     );
   },
@@ -81,7 +80,7 @@ export const AppleAuth: React.FC<AppleAuthProps> = ({
           clientId: appleAuthConfig.clientId,
           scope: appleAuthConfig.scope,
           redirectURI: appleAuthConfig.redirectURI,
-          state: appleAuthConfig.getState(redirectPath),
+          state: appleAuthConfig.getState(redirectPath, mode), // Pass mode explicitly
           usePopup: false,
         });
       }
@@ -93,7 +92,7 @@ export const AppleAuth: React.FC<AppleAuthProps> = ({
         document.head.removeChild(script);
       }
     };
-  }, [redirectPath]);
+  }, [redirectPath, mode]); // Add mode to dependencies
 
   const handleAppleAuth = async () => {
     try {
@@ -192,9 +191,11 @@ function SignupPage() {
 ## Flow Diagram
 
 ```
-1. User clicks "Sign in with Apple"
+1. User clicks "Sign in with Apple" (mode: signup or login)
    ↓
-2. Frontend calls AppleID.auth.signIn() with state containing redirect URL
+2. Frontend calls AppleID.auth.signIn() with state containing:
+   - redirect_url: Full frontend callback URL
+   - mode: 'signup' or 'login'
    ↓
 3. Redirects to Apple's auth page
    ↓
@@ -203,9 +204,11 @@ function SignupPage() {
 5. Apple redirects to backend: POST /api/v1/auth/apple/callback
    ↓
 6. Backend:
-   - Parses state to get frontend redirect URL
+   - Parses state to extract mode and redirect URL
    - Validates origin (*.unifiedbeez.com)
+   - Uses mode from state (not body.user) to determine flow
    - Exchanges code for tokens
+   - Calls authService.socialSignup() or socialLogin() based on mode
    - Creates session
    - Sets httpOnly cookie
    ↓
@@ -250,6 +253,16 @@ Backend redirects to callback with error query param:
 
 Handle in callback page and show appropriate message.
 
+## Why Mode Parameter?
+
+Apple's behavior with the `user` object is inconsistent:
+
+1. **First signup attempt**: Apple sends `body.user` with name/email
+2. **Retry after error**: Apple doesn't send `body.user` (user already authorized the app)
+3. **Subsequent logins**: Apple never sends `body.user`
+
+By explicitly passing `mode` in the state parameter, the backend always knows the user's intent regardless of Apple's behavior. This prevents the "User not found" error when a signup attempt fails and the user retries.
+
 ## Apple Developer Console Setup
 
 1. **App ID** - Enable Sign in with Apple capability
@@ -261,7 +274,22 @@ Handle in callback page and show appropriate message.
 ## Security Notes
 
 - Backend validates redirect URLs against allowed origins (`*.unifiedbeez.com`, localhost)
-- State parameter base64-encoded to pass redirect URL safely
+- State parameter base64-encoded to pass redirect URL and mode safely
 - Open redirect attacks prevented by origin validation
+- Mode extracted from state (controlled by frontend) instead of unreliable `body.user`
 - First-time users: Apple returns user name
 - Subsequent logins: Only email in ID token
+
+## Common Issues
+
+### "User not found" on signup retry
+
+**Solution**: The mode parameter in state ensures backend knows it's a signup attempt, even when Apple doesn't send `body.user` on retry.
+
+### Redirect to wrong URL after auth
+
+**Solution**: Ensure `redirectPath` is correctly set in `<AppleAuth>` component and backend validates the full URL from state.
+
+### Cookie not being set
+
+**Solution**: Check backend cookie settings include `secure: true` and `sameSite: 'none'` for cross-origin requests.
