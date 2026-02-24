@@ -14,6 +14,18 @@
 - `scheduledForCancellation`: Active until `expiresAt`, then deactivates
 - Plan limits apply to `active` count only
 
+**Billing Interval:**
+
+Addons inherit the billing interval of the user's **active Stripe subscription** — there is no per-addon interval selection. A user on a yearly subscription is always billed yearly for all addons (monthly price × 12, charged upfront). A user on a monthly subscription is billed monthly.
+
+```ts
+type BillingInterval = "MONTHLY" | "YEARLY";
+```
+
+> **Note:** The addon billing interval is derived from the actual Stripe subscription, not from `user.planBillingInterval`. These can temporarily differ when a monthly → yearly switch is scheduled but not yet applied (the switch takes effect at the end of the current monthly period). During that window, addon purchases use monthly pricing to match the live subscription.
+
+The `GET /addon/available` response includes a top-level `billingInterval` field and per-addon `effectivePriceEur` — use these directly rather than reading from the user profile separately.
+
 ---
 
 ## API Endpoints
@@ -28,12 +40,15 @@ GET /addon/available
 
 ```json
 {
+  "billingInterval": "YEARLY",
   "addons": [
     {
       "id": 1,
       "type": "EXTRA_SEAT",
       "name": "Extra Seat",
       "priceEur": 700,
+      "yearlyPriceEur": 8400,
+      "effectivePriceEur": 8400,
       "currentQuantity": 3,
       "basePlanAllowance": 5,
       "maxAllowed": 10,
@@ -43,6 +58,13 @@ GET /addon/available
   ]
 }
 ```
+
+**Price fields:**
+
+- `priceEur` — monthly base price in pence, always present (700 = £7.00/month)
+- `yearlyPriceEur` — always `priceEur × 12`, present regardless of billing interval, useful for comparison UIs
+- `effectivePriceEur` — the amount that will actually be charged: equals `yearlyPriceEur` on yearly plans, `priceEur` on monthly plans. **Use this as the primary display price.**
+- `billingInterval` — top-level field reflecting the user's current billing interval; use this to label prices and drive UI state without a separate profile call
 
 ### Purchase Addon
 
@@ -54,6 +76,8 @@ POST /addon/purchase
   "quantity": 2
 }
 ```
+
+The backend automatically determines the billing interval from the user's **active Stripe subscription** (not `user.planBillingInterval`) and uses it to select the Stripe price and set the addon expiry (30 days for monthly, 365 days for yearly). No `billingInterval` field is needed in the request.
 
 **MULTI_LANGUAGE_AI requires pre-selection:**
 
@@ -84,13 +108,15 @@ GET /addon/purchased
       "quantity": 5,
       "active": 3,
       "scheduledForCancellation": 2,
-      "priceEur": 700
+      "priceEur": 700,
+      "billingInterval": "YEARLY"
     },
     {
       "type": "MULTI_LANGUAGE_AI",
       "quantity": 3,
       "active": 2,
       "scheduledForCancellation": 1,
+      "billingInterval": "MONTHLY",
       "instances": [
         {
           "id": 4,
@@ -132,7 +158,10 @@ DELETE /addon/cancel-immediate/EXTRA_SEAT
 { "quantity": 1 }
 ```
 
-Returns prorated refund amount.
+Returns a prorated refund amount. The refund calculation is billing-interval-aware:
+
+- Monthly: prorated over 30 days
+- Yearly: prorated over 365 days
 
 ### Batch Purchase
 
@@ -165,12 +194,21 @@ PATCH /addon/multi-language/preferences
 
 ## Response Fields
 
-**All Addons:**
+**`GET /addon/available` (available addons):**
+
+- `billingInterval` — top-level, user's current plan billing interval
+- `priceEur` — monthly base price in pence, always present
+- `yearlyPriceEur` — `priceEur × 12`, always present
+- `effectivePriceEur` — actual charge amount based on billing interval; use this for the primary price display
+- `currentQuantity`, `basePlanAllowance`, `maxAllowed`, `remainingPurchasable`, `isIncludedInPlan`
+
+**`GET /addon/purchased` (purchased addons):**
 
 - `quantity`: Total count
 - `active`: Currently active (not scheduled for cancellation)
 - `scheduledForCancellation`: Count cancelling at end of billing cycle
-- `priceEur`: Price in cents (1000 = €10.00)
+- `priceEur`: Monthly base price in pence
+- `billingInterval`: `"MONTHLY"` or `"YEARLY"` — interval at time of purchase
 
 **MULTI_LANGUAGE_AI Only:**
 
@@ -178,6 +216,56 @@ PATCH /addon/multi-language/preferences
 - `instances[].id`: Use for cancellation
 - `instances[].language`: Language code
 - `instances[].scheduledForCancellation`: Boolean
+
+---
+
+## Displaying Addon Prices
+
+Use `effectivePriceEur` and `billingInterval` from the `GET /addon/available` response directly — no manual calculation needed:
+
+```tsx
+function formatAddonPrice(
+  addon: AvailableAddon,
+  billingInterval: "MONTHLY" | "YEARLY"
+) {
+  const effective = addon.effectivePriceEur / 100;
+  if (billingInterval === "YEARLY") {
+    const monthly = addon.priceEur / 100;
+    return {
+      label: `£${effective.toFixed(2)}/year`,
+      subLabel: `£${monthly.toFixed(2)}/mo equivalent`,
+    };
+  }
+  return {
+    label: `£${effective.toFixed(2)}/month`,
+    subLabel: null,
+  };
+}
+```
+
+Example display:
+
+```tsx
+// billingInterval and effectivePriceEur come directly from GET /addon/available
+const { billingInterval, addons } = await getAvailableAddons();
+
+addons.map((addon) => {
+  const { label, subLabel } = formatAddonPrice(addon, billingInterval);
+  return (
+    <PriceTag>
+      {label}
+      {subLabel && <SmallText>{subLabel}</SmallText>}
+    </PriceTag>
+  );
+});
+```
+
+For comparison UIs showing both prices side by side:
+
+```tsx
+<MonthlyPrice>{(addon.priceEur / 100).toFixed(2)}/mo</MonthlyPrice>
+<YearlyPrice>{(addon.yearlyPriceEur / 100).toFixed(2)}/yr</YearlyPrice>
+```
 
 ---
 
@@ -244,6 +332,14 @@ PATCH /addon/multi-language/preferences
 </Text>;
 ```
 
+### Show Billing Interval on Purchased Addon
+
+```tsx
+<Badge variant={addon.billingInterval === "YEARLY" ? "purple" : "default"}>
+  {addon.billingInterval === "YEARLY" ? "Yearly" : "Monthly"}
+</Badge>
+```
+
 ### MULTI_LANGUAGE_AI Instance List
 
 ```tsx
@@ -264,15 +360,19 @@ PATCH /addon/multi-language/preferences
 ### Purchase Flow
 
 ```tsx
-// 1. Check availability
-const { maxAllowed, remainingPurchasable } = await getAvailable(addonType);
+// 1. Fetch availability — includes billingInterval and pricing
+const { addons, billingInterval } = await getAvailableAddons();
+const addon = addons.find((a) => a.type === addonType);
 
-// 2. For MULTI_LANGUAGE_AI
+// 2. Show the correct price to the user
+const { label } = formatAddonPrice(addon, billingInterval);
+
+// 3. For MULTI_LANGUAGE_AI
 if (addonType === "MULTI_LANGUAGE_AI") {
   await updatePreferences({ languages: selectedLanguages });
 }
 
-// 3. Purchase
+// 4. Purchase (billing interval is automatic — derived from user's plan on the backend)
 await purchase({ addonType, quantity });
 ```
 
@@ -317,6 +417,12 @@ const maxQuantity = addon.remainingPurchasable;
 - Excess addons get refunded
 - Language preferences may be truncated
 - Refetch `/addon/purchased` after plan change
+
+**On billing interval change (monthly → yearly):**
+
+- Existing monthly addons remain until their `expiresAt`
+- New addon purchases after the switch will use yearly pricing
+- Refetch `/addon/purchased` after the yearly subscription activates
 
 **Check plan features:**
 
