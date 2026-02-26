@@ -13,18 +13,18 @@ interface AutomationResponse {
   id: number;
   name: string;
   description: string | null;
-  category: CategorySlug | null;     // kebab-case string, see Category Slugs
-  status: AutomationStatus;          // "DRAFT" | "ACTIVE" | "PAUSED" | "ARCHIVED"
-  logicVersion: string;              // e.g. "1.0.0"
+  category: CategorySlug | null; // kebab-case string, see Category Slugs
+  status: AutomationStatus; // "DRAFT" | "ACTIVE" | "PAUSED" | "ARCHIVED"
+  logicVersion: string; // e.g. "1.0.0"
   logic: {
     version: string;
     trigger: TriggerNode | null;
     steps: LogicStep[];
   };
-  layout: CanvasLayout | null;       // opaque JSON, stored as-is
+  layout: CanvasLayout | null; // opaque JSON, stored as-is
   _count?: { executions: number };
-  createdAt: string;                 // ISO 8601
-  updatedAt: string;                 // ISO 8601
+  createdAt: string; // ISO 8601
+  updatedAt: string; // ISO 8601
 }
 ```
 
@@ -32,8 +32,8 @@ interface AutomationResponse {
 
 ```typescript
 interface TriggerNode {
-  id: string;                        // stringified trigger DB id
-  type: AutomationTriggerType;       // backend enum
+  id: string; // stringified trigger DB id
+  type: AutomationTriggerType; // backend enum
   stepKey: "trigger";
   label: string;
   conditions: TriggerCondition[];
@@ -44,17 +44,17 @@ interface TriggerNode {
 
 ```typescript
 interface LogicStep {
-  id: string;                        // stringified step DB id
-  type: AutomationStepType;          // backend enum, ALL_CAPS
-  stepKey: string;                   // kebab-case routing key (see Step Key Reference)
-  label: string;                     // human-readable name
-  order: number;                     // stepOrder from DB (0-based for template steps)
-  config: Record<string, any>;       // flattened step config (see per-step shapes)
-  nextStepIds: string[];             // computed for linear automations; explicit for REENGAGEMENT
-  completionStatus: "pending" | "configured";
-  isDefault: boolean;                // true = step was pre-filled from a template
-  locked: boolean;                   // true = step order is locked (same as isDefault)
-  required: boolean;                 // true = step cannot be removed (same as isDefault)
+  id: string; // stringified step DB id
+  type: "action" | "condition" | "auto"; // semantic role — see Step Type Roles
+  stepKey: string; // kebab-case routing key (see Step Key Reference)
+  label: string; // human-readable name
+  order: number; // stepOrder from DB (0-based for predefined steps)
+  config: Record<string, any>; // flattened step config (see per-step shapes)
+  nextStepIds: string[]; // computed for linear categories; explicit for REENGAGEMENT
+  completionStatus: "pending" | "configured"; // "error" is client-side only
+  isDefault: boolean; // true = auto-created by backend (predefined step)
+  locked: boolean; // true = step order is fixed (same as isDefault)
+  required: boolean; // true = step cannot be removed (same as isDefault)
 }
 ```
 
@@ -66,11 +66,26 @@ An opaque JSON blob owned by the frontend. The backend stores and returns it wit
 interface CanvasLayout {
   viewport?: { x: number; y: number; zoom: number };
   nodes?: Record<string, { x: number; y: number }>;
-  groups?: Record<string, { x: number; y: number; width: number; height: number }>;
+  groups?: Record<
+    string,
+    { x: number; y: number; width: number; height: number }
+  >;
   links?: Record<string, { style?: Record<string, any> }>;
-  [key: string]: any;   // any additional canvas metadata
+  [key: string]: any;
 }
 ```
+
+---
+
+## Step Type Roles
+
+The `type` field classifies each step's semantic role:
+
+| `type`        | Applies to                                                               |
+| ------------- | ------------------------------------------------------------------------ |
+| `"action"`    | `SEND_MESSAGE`, `WAIT`, `AUTOMATION_LIST`, `TAG_ACTION`, `STATUS_CHANGE` |
+| `"condition"` | `SMART_RULE`, `TRIGGER_CONDITION`                                        |
+| `"auto"`      | All predefined template steps: `SLG_*`, `SE_*`, `RN_*`                   |
 
 ---
 
@@ -84,12 +99,12 @@ DRAFT ──activate──► ACTIVE ──pause──► PAUSED
   └─────────────── (unarchive) ─────────┘
 ```
 
-| Status | Meaning | Executions triggered? |
-|---|---|---|
-| `DRAFT` | Being configured, not yet live | No |
-| `ACTIVE` | Live — triggers fire and executions run | Yes |
-| `PAUSED` | Temporarily suspended | No |
-| `ARCHIVED` | Retired — no longer runs | No |
+| Status     | Meaning                                 | Executions triggered? |
+| ---------- | --------------------------------------- | --------------------- |
+| `DRAFT`    | Being configured, not yet live          | No                    |
+| `ACTIVE`   | Live — triggers fire and executions run | Yes                   |
+| `PAUSED`   | Temporarily suspended                   | No                    |
+| `ARCHIVED` | Retired — no longer runs                | No                    |
 
 Change status via `PATCH /automations/:id/status`.
 
@@ -99,13 +114,13 @@ Change status via `PATCH /automations/:id/status`.
 
 The `category` field in responses uses kebab-case strings:
 
-| DB enum | Response value |
-|---|---|
-| `SALES_LEAD_GENERATION` | `"sales-and-lead-generation"` |
-| `SUPPORT_ESCALATION` | `"support-escalation"` |
-| `RETENTION_NURTURE` | `"retention-nurture"` |
-| `REENGAGEMENT_CAMPAIGNS` | `"reengagement-campaigns"` |
-| *(none set)* | `null` |
+| DB enum                  | Response value                |
+| ------------------------ | ----------------------------- |
+| `SALES_LEAD_GENERATION`  | `"sales-and-lead-generation"` |
+| `SUPPORT_ESCALATION`     | `"support-escalation"`        |
+| `RETENTION_NURTURE`      | `"retention-nurture"`         |
+| `REENGAGEMENT_CAMPAIGNS` | `"reengagement-campaigns"`    |
+| _(none set)_             | `null`                        |
 
 ---
 
@@ -113,48 +128,48 @@ The `category` field in responses uses kebab-case strings:
 
 Use `stepKey` to route to the correct configuration drawer or component in the UI.
 
-### Core step types (any category)
+### Core step types (`type: "action"` or `type: "condition"`)
 
-| `type` (DB enum) | `stepKey` | Purpose |
-|---|---|---|
-| `SEND_MESSAGE` | `send-message` | Send email / WhatsApp / SMS |
-| `WAIT` | `wait` | Delay execution |
-| `SMART_RULE` | `smart-rule` | Conditional branch |
-| `AUTOMATION_LIST` | `automation-list` | Add/remove/move contact in a list |
-| `TRIGGER_CONDITION` | `trigger-condition` | Inline trigger check |
-| `TAG_ACTION` | `tag-action` | Apply or remove a tag |
-| `STATUS_CHANGE` | `status-change` | Update lead status |
+| `stepKey`           | DB enum             | `type`      | Purpose                           |
+| ------------------- | ------------------- | ----------- | --------------------------------- |
+| `send-message`      | `SEND_MESSAGE`      | `action`    | Send email / WhatsApp / SMS       |
+| `wait`              | `WAIT`              | `action`    | Delay execution                   |
+| `automation-list`   | `AUTOMATION_LIST`   | `action`    | Add/remove/move contact in a list |
+| `tag-action`        | `TAG_ACTION`        | `action`    | Apply or remove a tag             |
+| `status-change`     | `STATUS_CHANGE`     | `action`    | Update lead status                |
+| `smart-rule`        | `SMART_RULE`        | `condition` | Conditional branch                |
+| `trigger-condition` | `TRIGGER_CONDITION` | `condition` | Inline trigger check              |
 
-### Sales & Lead Generation template steps
+### Sales & Lead Generation predefined steps (`type: "auto"`)
 
-| `type` | `stepKey` | Human name |
-|---|---|---|
-| `SLG_WEBCHAT_INSTALL` | `slg-webchat-install` | Add BeeBot to Your Website |
-| `SLG_CONSENT_FLOW` | `slg-consent-flow` | Smart Consent Flow |
-| `SLG_SELECT_CHANNELS` | `slg-select-channels` | Select Connected Channels |
-| `SLG_SELECT_FAQS` | `slg-select-faqs` | Select FAQ Category |
-| `SLG_FORM_INTEGRATION` | `slg-form-integration` | Integrate Your Form |
-| `SLG_SENDER_EMAIL` | `slg-sender-email` | Configure Sender Email |
-| `SLG_CAMPAIGN_LIST` | `slg-campaign-list` | Create Campaign List |
-| `SLG_BEEBOT_HANDLER` | `slg-beebot-handler` | Select BeeBot Handler |
-| `SLG_CRM_TAGS` | `slg-crm-tags` | CRM Tags / Keywords |
-| `SLG_TAG_NOTIFICATIONS` | `slg-tag-notifications` | CRM Tag Notification Settings |
-| `SLG_OUTREACH_EMAIL` | `slg-outreach-email` | Build Your Outreach Email |
+| `stepKey`               | DB enum                 | Human name                    |
+| ----------------------- | ----------------------- | ----------------------------- |
+| `slg-webchat-install`   | `SLG_WEBCHAT_INSTALL`   | Add BeeBot to Your Website    |
+| `slg-consent-flow`      | `SLG_CONSENT_FLOW`      | Smart Consent Flow            |
+| `slg-select-channels`   | `SLG_SELECT_CHANNELS`   | Select Connected Channels     |
+| `slg-select-faqs`       | `SLG_SELECT_FAQS`       | Select FAQ Category           |
+| `slg-form-integration`  | `SLG_FORM_INTEGRATION`  | Integrate Your Form           |
+| `slg-sender-email`      | `SLG_SENDER_EMAIL`      | Configure Sender Email        |
+| `slg-campaign-list`     | `SLG_CAMPAIGN_LIST`     | Create Campaign List          |
+| `slg-beebot-handler`    | `SLG_BEEBOT_HANDLER`    | Select BeeBot Handler         |
+| `slg-crm-tags`          | `SLG_CRM_TAGS`          | CRM Tags / Keywords           |
+| `slg-tag-notifications` | `SLG_TAG_NOTIFICATIONS` | CRM Tag Notification Settings |
+| `slg-outreach-email`    | `SLG_OUTREACH_EMAIL`    | Build Your Outreach Email     |
 
-### Support Escalation template steps
+### Support Escalation predefined steps (`type: "auto"`)
 
-| `type` | `stepKey` | Human name |
-|---|---|---|
-| `SE_SELECT_CHANNELS` | `se-select-channels` | Select Connected Channels |
-| `SE_SELECT_FAQS` | `se-select-faqs` | Select FAQ Category |
+| `stepKey`            | DB enum              | Human name                |
+| -------------------- | -------------------- | ------------------------- |
+| `se-select-channels` | `SE_SELECT_CHANNELS` | Select Connected Channels |
+| `se-select-faqs`     | `SE_SELECT_FAQS`     | Select FAQ Category       |
 
-### Retention & Nurture template steps
+### Retention & Nurture predefined steps (`type: "auto"`)
 
-| `type` | `stepKey` | Human name |
-|---|---|---|
-| `RN_CREATE_CAMPAIGN` | `rn-create-campaign` | Create Campaign |
-| `RN_CAMPAIGN_CONFIG` | `rn-campaign-config` | Campaign Configuration |
-| `RN_OUTREACH_EMAIL` | `rn-outreach-email` | Build Your Outreach Email |
+| `stepKey`            | DB enum              | Human name                |
+| -------------------- | -------------------- | ------------------------- |
+| `rn-create-campaign` | `RN_CREATE_CAMPAIGN` | Create Campaign           |
+| `rn-campaign-config` | `RN_CAMPAIGN_CONFIG` | Campaign Configuration    |
+| `rn-outreach-email`  | `RN_OUTREACH_EMAIL`  | Build Your Outreach Email |
 
 ---
 
@@ -162,39 +177,41 @@ Use `stepKey` to route to the correct configuration drawer or component in the U
 
 The backend computes `completionStatus` per step based on whether the required config key(s) are populated.
 
-| `stepKey` | Required key(s) | Logic |
-|---|---|---|
-| `send-message` | `messageType` | Any one non-empty |
-| `wait` | `waitMinutes`, `waitHours`, `waitDays` | **Any one** > 0 |
-| `smart-rule` | `conditions` | Non-empty array |
-| `automation-list` | `action` | Non-empty |
-| `trigger-condition` | `conditions` | Non-empty array |
-| `slg-webchat-install` | `websiteUrl` | Non-empty string |
-| `slg-consent-flow` | `method` | Non-empty string |
-| `slg-select-channels` | `channelAccounts` | Non-empty array |
-| `slg-select-faqs` | `faqIds` | Non-empty array |
-| `slg-form-integration` | `embedUrl` | Non-empty string |
-| `slg-sender-email` | `emailConfigId` | Non-null |
-| `slg-campaign-list` | `listIds` | Non-empty array |
-| `slg-beebot-handler` | `aiAssistantId` | Non-null |
-| `slg-crm-tags` | `tagIds` | Non-empty array |
-| `slg-tag-notifications` | `notifications` | Non-empty array |
-| `slg-outreach-email` | `emailTemplateId` | Non-null |
-| `se-select-channels` | `channelAccounts` | Non-empty array |
-| `se-select-faqs` | `faqIds` | Non-empty array |
-| `rn-create-campaign` | `tagIds` | Non-empty array |
-| `rn-campaign-config` | `leadSourceChannelId` | Non-null |
-| `rn-outreach-email` | `emailTemplateId` | Non-null |
+| `stepKey`               | Required key(s)                        | Logic            |
+| ----------------------- | -------------------------------------- | ---------------- |
+| `send-message`          | `messageType`                          | Non-empty        |
+| `wait`                  | `waitMinutes`, `waitHours`, `waitDays` | **Any one** > 0  |
+| `smart-rule`            | `conditions`                           | Non-empty array  |
+| `automation-list`       | `action`                               | Non-empty        |
+| `trigger-condition`     | `conditions`                           | Non-empty array  |
+| `slg-webchat-install`   | `websiteUrl`                           | Non-empty string |
+| `slg-consent-flow`      | `method`                               | Non-empty string |
+| `slg-select-channels`   | `channelAccounts`                      | Non-empty array  |
+| `slg-select-faqs`       | `faqIds`                               | Non-empty array  |
+| `slg-form-integration`  | `embedUrl`                             | Non-empty string |
+| `slg-sender-email`      | `emailConfigId`                        | Non-null         |
+| `slg-campaign-list`     | `listIds`                              | Non-empty array  |
+| `slg-beebot-handler`    | `aiAssistantId`                        | Non-null         |
+| `slg-crm-tags`          | `tagIds`                               | Non-empty array  |
+| `slg-tag-notifications` | `notifications`                        | Non-empty array  |
+| `slg-outreach-email`    | `emailTemplateId`                      | Non-null         |
+| `se-select-channels`    | `channelAccounts`                      | Non-empty array  |
+| `se-select-faqs`        | `faqIds`                               | Non-empty array  |
+| `rn-create-campaign`    | `tagIds`                               | Non-empty array  |
+| `rn-campaign-config`    | `leadSourceChannelId`                  | Non-null         |
+| `rn-outreach-email`     | `emailTemplateId`                      | Non-null         |
 
-A step with **no matching entry** in the table defaults to `"configured"`.
+> `"error"` is a **client-side only** state — the backend never returns it.
+
+A step with no matching entry defaults to `"configured"`.
 
 ---
 
 ## `nextStepIds` Routing
 
-### Linear categories (SLG, SE, RN, and non-template automations)
+### Linear categories (SLG, SE, RN, and standard automations)
 
-`nextStepIds` is **computed at response time** from step order. Each step points to the immediately following step:
+`nextStepIds` is **computed at response time** from step order:
 
 ```
 step[order=0] → nextStepIds: ["<step[order=1].id>"]
@@ -204,27 +221,11 @@ step[order=N] → nextStepIds: []   // last step
 
 ### Reengagement Campaigns (`REENGAGEMENT_CAMPAIGNS`)
 
-`nextStepIds` comes from the **explicitly stored `nextStepId`** on each `AutomationStep`. Steps that haven't been linked yet have `nextStepIds: []`.
-
-Smart Rule steps in reengagement automations also carry `trueNextStepId` and `falseNextStepId` inside their `config`:
-
-```json
-{
-  "stepKey": "smart-rule",
-  "config": {
-    "name": "Check lead status",
-    "conditions": [...],
-    "trueNextStepId": 203,
-    "falseNextStepId": 205
-  }
-}
-```
+`nextStepIds` comes from the **explicitly stored `nextStepId`** on each `AutomationStep`. Smart Rule steps also carry `trueNextStepId` / `falseNextStepId` in their `config`.
 
 ---
 
 ## Step `config` Shapes
-
-These are the exact objects returned in `LogicStep.config` after the backend flattens the polymorphic step config models.
 
 ### `send-message`
 
@@ -237,12 +238,12 @@ These are the exact objects returned in `LogicStep.config` after the backend fla
 }
 ```
 
-| Field | Type | `messageType` values |
-|---|---|---|
-| `messageType` | string | `"MARKETING_EMAIL"` \| `"WHATSAPP"` \| `"SMS"` |
-| `emailTemplateId` | number \| null | Used when `messageType = "MARKETING_EMAIL"` |
-| `customMessage` | string \| null | Used for WhatsApp / SMS |
-| `sendingTime` | string \| null | HH:MM preferred send time |
+| Field             | Type           | `messageType` values                           |
+| ----------------- | -------------- | ---------------------------------------------- |
+| `messageType`     | string         | `"MARKETING_EMAIL"` \| `"WHATSAPP"` \| `"SMS"` |
+| `emailTemplateId` | number \| null | Used when `messageType = "MARKETING_EMAIL"`    |
+| `customMessage`   | string \| null | Used for WhatsApp / SMS                        |
+| `sendingTime`     | string \| null | HH:MM preferred send time                      |
 
 ---
 
@@ -258,7 +259,7 @@ These are the exact objects returned in `LogicStep.config` after the backend fla
 }
 ```
 
-Only one of `waitMinutes`, `waitHours`, `waitDays` needs to be set. `waitUntilTime` (HH:MM) and `waitUntilDay` (day-of-week string) are optional scheduling constraints.
+Only one of `waitMinutes`, `waitHours`, `waitDays` needs to be set.
 
 ---
 
@@ -282,15 +283,7 @@ Only one of `waitMinutes`, `waitHours`, `waitDays` needs to be set. `waitUntilTi
 }
 ```
 
-`trueNextStepId` and `falseNextStepId` are only relevant (and non-null) for `REENGAGEMENT_CAMPAIGNS` automations.
-
-**Condition operators** (ConditionOperator enum):
-`EQUALS`, `NOT_EQUALS`, `CONTAINS`, `NOT_CONTAINS`, `GREATER_THAN`, `LESS_THAN`, `IS_EMPTY`, `IS_NOT_EMPTY`
-
-**Condition types:**
-- `"trigger"` — references an `AutomationTriggerType`
-- `"campaign"` — references a campaign via `targetCampaignId`
-- `"field"` — references a lead field via `fieldName`
+`trueNextStepId` / `falseNextStepId` are only relevant for `REENGAGEMENT_CAMPAIGNS` automations.
 
 ---
 
@@ -308,15 +301,7 @@ Only one of `waitMinutes`, `waitHours`, `waitDays` needs to be set. `waitUntilTi
 }
 ```
 
-**Action values** (`AutomationListAction` enum):
-
-| Value | Description |
-|---|---|
-| `ADD_TO_CAMPAIGN` | Add contact to a campaign |
-| `REMOVE_FROM_CAMPAIGN` | Remove contact from a campaign |
-| `COPY_TO_CAMPAIGN` | Copy contact to another campaign |
-| `MOVE_BETWEEN_TAG_GROUPS` | Move between tag groups |
-| `MOVE_BETWEEN_FAQ_GROUPS` | Move between FAQ groups |
+**Action values:** `ADD_TO_CAMPAIGN`, `REMOVE_FROM_CAMPAIGN`, `COPY_TO_CAMPAIGN`, `MOVE_BETWEEN_TAG_GROUPS`, `MOVE_BETWEEN_FAQ_GROUPS`
 
 ---
 
@@ -340,29 +325,27 @@ Only one of `waitMinutes`, `waitHours`, `waitDays` needs to be set. `waitUntilTi
 
 ---
 
-### Template step configs (SLG / SE / RN)
+### Predefined step configs (`type: "auto"`)
 
-Template steps (`isDefault: true`) have their configuration stored in the parent `CampaignTemplateStepConfig.config` JSON. Because these steps are created from templates rather than through the standard step config models, their `config` field may be an empty object `{}` until the user edits the step within the automation.
+Predefined steps (`isDefault: true`) store their config in the `AutomationStep.config` JSON column. The config starts empty (`{}`) and is filled via `PATCH /automations/:id/steps/:stepId`.
 
-Refer to the [Campaign Templates guide](./campaign-templates.md) for the full per-step config shape reference.
+Refer to the [Automation Categories guide](./campaign-templates.md) for the full per-step config shape reference.
 
 ---
 
 ## Trigger Types
 
-The `trigger.type` field uses the `AutomationTriggerType` enum:
-
-| Value | Meaning |
-|---|---|
-| `CONTACT_SUBSCRIBED` | Contact joins a campaign |
-| `CONTACT_UNSUBSCRIBED` | Contact leaves a campaign |
-| `TAG_APPLIED` | A tag is applied to a contact |
-| `TAG_REMOVED` | A tag is removed from a contact |
-| `INACTIVITY` | Contact inactive for N days |
-| `FORM_SUBMITTED` | Form submission received |
-| `CHAT_INITIATED` | Chat started |
-| `FAQ_TRIGGERED` | FAQ trigger fired |
-| `MANUAL` | Manually triggered |
+| Value                  | Meaning                         |
+| ---------------------- | ------------------------------- |
+| `CONTACT_SUBSCRIBED`   | Contact joins a campaign        |
+| `CONTACT_UNSUBSCRIBED` | Contact leaves a campaign       |
+| `TAG_APPLIED`          | A tag is applied to a contact   |
+| `TAG_REMOVED`          | A tag is removed from a contact |
+| `INACTIVITY`           | Contact inactive for N days     |
+| `FORM_SUBMITTED`       | Form submission received        |
+| `CHAT_INITIATED`       | Chat started                    |
+| `FAQ_TRIGGERED`        | FAQ trigger fired               |
+| `MANUAL`               | Manually triggered              |
 
 ---
 
@@ -378,22 +361,41 @@ Authorization: Bearer <token>
 
 ---
 
+### Get category definitions
+
+```
+GET /automations/categories
+```
+
+Static response — no DB query. Returns 4 category objects, each with their predefined step shapes.
+
+**Response `200`** — see [Automation Categories guide](./campaign-templates.md).
+
+---
+
 ### Create automation
 
 ```
 POST /automations
 ```
 
-Creates an automation from scratch (not from a template). For template-based automations see [Campaign Templates guide](./campaign-templates.md).
-
-**Request body**
+**Minimum body:**
 
 ```json
 {
-  "name": "Re-engage cold leads",
+  "name": "My SLG Setup",
+  "automationCategory": "SALES_LEAD_GENERATION"
+}
+```
+
+**Full body (all optional fields):**
+
+```json
+{
+  "name": "My SLG Setup",
+  "automationCategory": "SALES_LEAD_GENERATION",
   "description": "Optional",
   "startType": "TRIGGER_BASED",
-  "campaignId": 5,
   "sourceFilterEnabled": false,
   "allowedSources": [],
   "inactivityFilterEnabled": false,
@@ -411,59 +413,25 @@ Creates an automation from scratch (not from a template). For template-based aut
         {
           "conditionOrder": 0,
           "logicOperator": null,
-          "fieldName": null,
           "operator": "GREATER_THAN",
           "value": "30"
         }
       ]
     }
   ],
-  "steps": [
-    {
-      "stepOrder": 1,
-      "stepType": "SEND_MESSAGE",
-      "name": "Win-back Email",
-      "messageConfig": {
-        "messageType": "MARKETING_EMAIL",
-        "emailTemplateId": 7,
-        "sendingTime": "10:00"
-      }
-    },
-    {
-      "stepOrder": 2,
-      "stepType": "WAIT",
-      "name": "Wait 3 days",
-      "waitConfig": {
-        "waitDays": 3
-      }
-    },
-    {
-      "stepOrder": 3,
-      "stepType": "SMART_RULE",
-      "name": "Check engagement",
-      "smartRuleConfig": {
-        "name": "Opened email?",
-        "conditions": [
-          {
-            "conditionOrder": 0,
-            "conditionType": "field",
-            "fieldName": "emailOpened",
-            "operator": "EQUALS",
-            "value": "true"
-          }
-        ]
-      }
-    }
-  ]
+  "steps": []
 }
 ```
 
-**Constraints**:
-- `triggers` must contain **exactly 1** trigger (more = 400).
-- At least 1 step required.
-- `campaignId` is optional — omit for template-based automations.
+**Constraints:**
 
-**Response `201`** — raw automation record (not the logic/layout shape). Fetch `GET /automations/:id` to get the full transformer output.
+- `name` and `automationCategory` are required.
+- `triggers` is optional — max 1 if provided.
+- `steps` is optional — these are appended after the auto-created predefined steps.
+- For `SALES_LEAD_GENERATION`, `SUPPORT_ESCALATION`, `RETENTION_NURTURE`: backend auto-creates predefined steps with `isTemplatePrefilled: true`.
+- For `REENGAGEMENT_CAMPAIGNS`: blank slate — add steps manually afterward.
+
+**Response `201`** — raw automation record. Fetch `GET /automations/:id` for the full `{ logic, layout }` output.
 
 ---
 
@@ -471,52 +439,14 @@ Creates an automation from scratch (not from a template). For template-based aut
 
 ```
 GET /automations
-GET /automations?campaignId=5
+GET /automations?category=SALES_LEAD_GENERATION
 ```
 
-**Response `200`** — array of `AutomationResponse` objects (full `{ logic, layout }` contract for each).
+| Query param | Type                         | Required | Notes              |
+| ----------- | ---------------------------- | -------- | ------------------ |
+| `category`  | `AutomationTemplateCategory` | no       | Filter by category |
 
-```json
-[
-  {
-    "id": 45,
-    "name": "Win-back Campaign",
-    "description": null,
-    "category": "reengagement-campaigns",
-    "status": "DRAFT",
-    "logicVersion": "1.0.0",
-    "logic": {
-      "version": "1.0.0",
-      "trigger": {
-        "id": "22",
-        "type": "INACTIVITY",
-        "stepKey": "trigger",
-        "label": "30-day inactive",
-        "conditions": [...]
-      },
-      "steps": [
-        {
-          "id": "200",
-          "type": "SEND_MESSAGE",
-          "stepKey": "send-message",
-          "label": "Win-back Email",
-          "order": 1,
-          "config": { "messageType": "MARKETING_EMAIL", "emailTemplateId": 7, ... },
-          "nextStepIds": ["201"],
-          "completionStatus": "configured",
-          "isDefault": false,
-          "locked": false,
-          "required": false
-        }
-      ]
-    },
-    "layout": null,
-    "_count": { "executions": 0 },
-    "createdAt": "2026-02-25T10:00:00.000Z",
-    "updatedAt": "2026-02-25T10:00:00.000Z"
-  }
-]
-```
+**Response `200`** — array of `AutomationResponse` (full `{ logic, layout }` contract for each).
 
 ---
 
@@ -526,7 +456,84 @@ GET /automations?campaignId=5
 GET /automations/:id
 ```
 
-**Response `200`** — single `AutomationResponse` (same shape as one item in the list).
+**Response `200`** — single `AutomationResponse`.
+
+**Example response for an SLG automation:**
+
+```json
+{
+  "id": 45,
+  "name": "My SLG Setup",
+  "description": null,
+  "category": "sales-and-lead-generation",
+  "status": "DRAFT",
+  "logicVersion": "1.0.0",
+  "logic": {
+    "version": "1.0.0",
+    "trigger": null,
+    "steps": [
+      {
+        "id": "200",
+        "type": "auto",
+        "stepKey": "slg-webchat-install",
+        "label": "Add BeeBot to Your Website",
+        "order": 0,
+        "config": {},
+        "nextStepIds": ["201"],
+        "completionStatus": "pending",
+        "isDefault": true,
+        "locked": true,
+        "required": true
+      },
+      {
+        "id": "201",
+        "type": "auto",
+        "stepKey": "slg-consent-flow",
+        "label": "Smart Consent Flow",
+        "order": 1,
+        "config": {},
+        "nextStepIds": ["202"],
+        "completionStatus": "pending",
+        "isDefault": true,
+        "locked": true,
+        "required": true
+      }
+    ]
+  },
+  "layout": null,
+  "_count": { "executions": 0 },
+  "createdAt": "2026-02-26T10:00:00.000Z",
+  "updatedAt": "2026-02-26T10:00:00.000Z"
+}
+```
+
+---
+
+### Update step configuration
+
+```
+PATCH /automations/:id/steps/:stepId
+```
+
+Unified endpoint for configuring any step:
+
+- **Predefined steps** (`type: "auto"`, `SLG_*` / `SE_*` / `RN_*`): writes to the `AutomationStep.config` JSON column.
+- **Standard steps** (`SEND_MESSAGE`, `WAIT`, etc.): writes to the relevant polymorphic config model.
+
+**Request body**
+
+```json
+{
+  "config": {
+    "websiteUrl": "https://example.com",
+    "installVerified": false
+  }
+}
+```
+
+Note: the `stepId` in the URL is the integer DB ID — parse `LogicStep.id` (which is a string) to int.
+
+**Response `200`** — the updated step record.
 
 ---
 
@@ -536,9 +543,7 @@ GET /automations/:id
 PUT /automations/:id
 ```
 
-Replaces the automation's configuration. Accepts the same body as `POST /automations` (all fields partial). When `triggers` or `steps` are included, the existing records are **deleted and recreated**.
-
-**Response `200`** — raw updated automation record.
+Partial update of automation metadata, triggers, and steps. When `triggers` or `steps` are provided, existing records are **deleted and recreated**.
 
 ---
 
@@ -547,8 +552,6 @@ Replaces the automation's configuration. Accepts the same body as `POST /automat
 ```
 DELETE /automations/:id
 ```
-
-Deletes the automation and stops all executions.
 
 **Response `200`**
 
@@ -564,18 +567,9 @@ Deletes the automation and stops all executions.
 PATCH /automations/:id/status
 ```
 
-**Request body**
-
 ```json
 { "status": "ACTIVE" }
 ```
-
-| Value | Effect |
-|---|---|
-| `"DRAFT"` | Moves back to draft |
-| `"ACTIVE"` | Goes live — triggers will fire |
-| `"PAUSED"` | Suspends without losing config |
-| `"ARCHIVED"` | Permanently retired |
 
 **Response `200`**
 
@@ -583,7 +577,7 @@ PATCH /automations/:id/status
 {
   "id": 45,
   "status": "ACTIVE",
-  "updatedAt": "2026-02-25T12:00:00.000Z"
+  "updatedAt": "2026-02-26T12:00:00.000Z"
 }
 ```
 
@@ -595,9 +589,7 @@ PATCH /automations/:id/status
 PATCH /automations/:id/layout
 ```
 
-Persists visual canvas data. Call this **debounced** (e.g. 1 second after last user drag) to avoid excessive writes. The backend stores the JSON opaquely and returns it unchanged in all subsequent `GET` responses.
-
-**Request body**
+Call this **debounced** (e.g. 1 second after last drag). The backend stores the JSON opaquely.
 
 ```json
 {
@@ -606,20 +598,8 @@ Persists visual canvas data. Call this **debounced** (e.g. 1 second after last u
     "nodes": {
       "200": { "x": 400, "y": 100 },
       "201": { "x": 400, "y": 250 }
-    },
-    "groups": {},
-    "links": {}
+    }
   }
-}
-```
-
-**Response `200`**
-
-```json
-{
-  "id": 45,
-  "layout": { ... },
-  "updatedAt": "2026-02-25T12:05:00.000Z"
 }
 ```
 
@@ -631,11 +611,11 @@ Persists visual canvas data. Call this **debounced** (e.g. 1 second after last u
 POST /automations/:id/steps
 ```
 
-**Request body** — same `CreateStepDto` shape used in the automation create payload, but for a single step:
+Add a non-predefined step. Step order must not conflict with existing steps.
 
 ```json
 {
-  "stepOrder": 4,
+  "stepOrder": 12,
   "stepType": "SEND_MESSAGE",
   "name": "Follow-up Email",
   "messageConfig": {
@@ -645,17 +625,15 @@ POST /automations/:id/steps
 }
 ```
 
-> **Note:** Steps with `isTemplatePrefilled: true` cannot be inserted between other pre-filled steps. Appending after all pre-filled steps is always allowed.
-
 ---
 
-### Update a step
+### Update a step (full replace)
 
 ```
 PUT /automations/:id/steps/:stepId
 ```
 
-Replaces the step's config. Same body shape as add-step.
+Replaces the step's metadata and config. Same body shape as add-step.
 
 ---
 
@@ -667,28 +645,23 @@ DELETE /automations/:id/steps/:stepId
 
 ---
 
-### Execution endpoints
-
-#### List executions for an automation
+### Reorder a step
 
 ```
-GET /automations/:id/executions?page=1&limit=20
-```
-
-#### Get execution details
-
-```
-GET /automations/:id/executions/:executionId
-```
-
-#### Trigger manual execution
-
-```
-POST /automations/:id/execute
+PATCH /automations/:id/steps/:stepId/reorder
 ```
 
 ```json
-{ "contactId": 123 }
+{ "newStepOrder": 3 }
+```
+
+---
+
+### Execution endpoints
+
+```
+GET  /automations/:id/executions?page=1&limit=20
+POST /automations/:id/test   { "customerId": 123 }
 ```
 
 ---
@@ -697,24 +670,20 @@ POST /automations/:id/execute
 
 ### Linear automations (SLG, SE, RN, non-template)
 
-The execution engine advances from `stepOrder N` → `stepOrder N+1` sequentially. All `SMART_RULE` steps evaluate their conditions but the result does not branch — execution always continues to the next step in order.
+Execution advances `stepOrder N` → `stepOrder N+1` sequentially. `SMART_RULE` steps still evaluate but do not branch (true/false paths are ignored).
 
 ### Reengagement automations
 
 Steps carry explicit `nextStepId` edges. The engine follows:
-- `currentStep.nextStepId` → next step (or stops if null)
-- For `SMART_RULE` steps: evaluates conditions → follows `trueNextStepId` or `falseNextStepId` from `SmartRuleStepConfig`
 
-To configure branching in a reengagement automation:
-1. Create step A and step B
-2. Set `step_A.nextStepId = step_B.id` (via `PUT /automations/:id/steps/:stepId`)
-3. For Smart Rule branching, include `trueNextStepId` and `falseNextStepId` in the smart rule config
+- `currentStep.nextStepId` → next step (or stops if null)
+- For `SMART_RULE` steps: follows `trueNextStepId` or `falseNextStepId` from `SmartRuleStepConfig`
 
 ---
 
-## Template-Prefilled Steps
+## Predefined (isDefault) Steps
 
-When an automation is created from a campaign template, its steps carry `isTemplatePrefilled: true`. In the response contract this maps to:
+When an automation is created under SLG, SE, or RN, the backend auto-creates predefined steps with `isTemplatePrefilled: true`. In the response this maps to:
 
 ```json
 {
@@ -725,62 +694,36 @@ When an automation is created from a campaign template, its steps carry `isTempl
 ```
 
 **UI implications:**
-- The step's position in the pre-filled block cannot be changed by the user
-- The step cannot be deleted
-- The step's `config` can still be edited (updating the step config within the automation does not affect the source template)
-- Additional steps can be appended after all pre-filled steps
+
+- Position cannot be changed
+- Cannot be deleted
+- `config` can be edited via `PATCH /automations/:id/steps/:stepId`
+- Additional steps can be appended after all predefined steps
 
 ---
 
 ## Filter Options (Automation-level)
 
-These fields are set on the `Automation` record and control which contacts enter the automation:
-
-| Field | Type | Description |
-|---|---|---|
-| `sourceFilterEnabled` | boolean | Restrict to specific lead sources |
-| `allowedSources` | string[] | Allowed source identifiers |
-| `inactivityFilterEnabled` | boolean | Only run for contacts inactive for N units |
-| `inactivityThreshold` | number | Threshold value |
-| `inactivityUnit` | `InactivityUnit` | `"MINUTES"` \| `"HOURS"` \| `"DAYS"` \| `"WEEKS"` \| `"MONTHS"` |
-| `tagFilterEnabled` | boolean | Restrict to contacts with specific tags |
-| `allowedTagIds` | number[] | Allowed tag IDs |
-| `statusFilterEnabled` | boolean | Restrict to contacts with specific statuses |
-| `allowedStatuses` | string[] | Allowed `CustomerStatusType` values |
-
----
-
-## Common Response Shapes
-
-### `TriggerCondition`
-
-```typescript
-interface TriggerCondition {
-  id: number;
-  conditionOrder: number;
-  logicOperator: "AND" | "OR" | null;
-  fieldName: string | null;
-  operator: ConditionOperator;
-  value: string | null;
-  targetCampaignId: number | null;
-  targetTagGroupId: number | null;
-  targetFaqGroupId: number | null;
-  // Resolved names (if available)
-  targetCampaign?: { name: string } | null;
-  targetTagGroup?: { id: number; tagId: number } | null;
-  targetFaqGroup?: { id: number; questionId: number } | null;
-}
-```
+| Field                     | Type     | Description                                                     |
+| ------------------------- | -------- | --------------------------------------------------------------- |
+| `sourceFilterEnabled`     | boolean  | Restrict to specific lead sources                               |
+| `allowedSources`          | string[] | Allowed source identifiers                                      |
+| `inactivityFilterEnabled` | boolean  | Only run for contacts inactive for N units                      |
+| `inactivityThreshold`     | number   | Threshold value                                                 |
+| `inactivityUnit`          | string   | `"MINUTES"` \| `"HOURS"` \| `"DAYS"` \| `"WEEKS"` \| `"MONTHS"` |
+| `tagFilterEnabled`        | boolean  | Restrict to contacts with specific tags                         |
+| `allowedTagIds`           | number[] | Allowed tag IDs                                                 |
+| `statusFilterEnabled`     | boolean  | Restrict to contacts with specific statuses                     |
+| `allowedStatuses`         | string[] | Allowed `CustomerStatusType` values                             |
 
 ---
 
 ## Error Responses
 
-| Status | Scenario |
-|---|---|
-| `400` | Missing required field, invalid step config, or more than 1 trigger provided |
-| `404` | Automation not found or belongs to another user |
-| `400` | Attempting to insert step between pre-filled steps (when applicable) |
+| Status | Scenario                                                                           |
+| ------ | ---------------------------------------------------------------------------------- |
+| `400`  | Missing `name` or `automationCategory` / more than 1 trigger / invalid step config |
+| `404`  | Automation or step not found or belongs to another user                            |
 
 ---
 
@@ -789,26 +732,33 @@ interface TriggerCondition {
 ```typescript
 type AutomationStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "ARCHIVED";
 
+type AutomationTemplateCategory =
+  | "SALES_LEAD_GENERATION"
+  | "SUPPORT_ESCALATION"
+  | "RETENTION_NURTURE"
+  | "REENGAGEMENT_CAMPAIGNS";
+
 type CategorySlug =
   | "sales-and-lead-generation"
   | "support-escalation"
   | "retention-nurture"
   | "reengagement-campaigns";
 
-type CompletionStatus = "pending" | "configured";
+type StepTypeRole = "action" | "condition" | "auto";
+type CompletionStatus = "pending" | "configured"; // "error" is client-side only
 
 interface TriggerNode {
   id: string;
-  type: string;            // AutomationTriggerType enum value
+  type: string; // AutomationTriggerType enum value
   stepKey: "trigger";
   label: string;
   conditions: TriggerCondition[];
 }
 
 interface LogicStep {
-  id: string;
-  type: string;            // AutomationStepType enum value
-  stepKey: string;         // kebab-case routing key
+  id: string; // stringified DB id — parse to int for PATCH endpoint
+  type: StepTypeRole;
+  stepKey: string;
   label: string;
   order: number;
   config: Record<string, any>;
@@ -819,12 +769,6 @@ interface LogicStep {
   required: boolean;
 }
 
-interface AutomationLogic {
-  version: string;
-  trigger: TriggerNode | null;
-  steps: LogicStep[];
-}
-
 interface AutomationResponse {
   id: number;
   name: string;
@@ -832,7 +776,11 @@ interface AutomationResponse {
   category: CategorySlug | null;
   status: AutomationStatus;
   logicVersion: string;
-  logic: AutomationLogic;
+  logic: {
+    version: string;
+    trigger: TriggerNode | null;
+    steps: LogicStep[];
+  };
   layout: Record<string, any> | null;
   _count?: { executions: number };
   createdAt: string;
@@ -844,65 +792,53 @@ interface AutomationResponse {
 
 ## Quick-start Examples
 
-### Creating and activating a simple email automation
+### Create and configure an SLG automation
 
 ```typescript
-// 1. Create
-const automation = await fetch('/automations', {
-  method: 'POST',
+// 1. Get category definitions (optional — for displaying step list in UI)
+const categories = await fetch("/automations/categories").then((r) => r.json());
+const slg = categories.find((c) => c.category === "SALES_LEAD_GENERATION");
+
+// 2. Create automation (backend auto-populates 11 predefined steps)
+const { id } = await fetch("/automations", {
+  method: "POST",
   body: JSON.stringify({
-    name: 'Welcome Email',
-    startType: 'TRIGGER_BASED',
-    triggers: [{
-      triggerType: 'CONTACT_SUBSCRIBED',
-      name: 'On subscribe',
-      conditions: []
-    }],
-    steps: [{
-      stepOrder: 1,
-      stepType: 'SEND_MESSAGE',
-      name: 'Welcome Email',
-      messageConfig: {
-        messageType: 'MARKETING_EMAIL',
-        emailTemplateId: 3
-      }
-    }]
-  })
+    name: "My SLG Setup",
+    automationCategory: "SALES_LEAD_GENERATION",
+  }),
+}).then((r) => r.json());
+
+// 3. Get automation with predefined steps
+const automation = await fetch(`/automations/${id}`).then((r) => r.json());
+// automation.logic.steps → 11 steps, all type: "auto", completionStatus: "pending"
+
+// 4. Configure step 0 (webchat install)
+const stepId = parseInt(automation.logic.steps[0].id);
+await fetch(`/automations/${id}/steps/${stepId}`, {
+  method: "PATCH",
+  body: JSON.stringify({
+    config: { websiteUrl: "https://example.com", installVerified: false },
+  }),
 });
 
-// 2. Activate
-await fetch(`/automations/${automation.id}/status`, {
-  method: 'PATCH',
-  body: JSON.stringify({ status: 'ACTIVE' })
+// 5. Activate when all steps configured
+await fetch(`/automations/${id}/status`, {
+  method: "PATCH",
+  body: JSON.stringify({ status: "ACTIVE" }),
 });
 ```
 
-### Creating a template-based automation
+### Create a blank Reengagement automation
 
 ```typescript
-// 1. Create SLG template
-const template = await fetch('/campaign-templates', {
-  method: 'POST',
-  body: JSON.stringify({ name: 'My SLG', category: 'SALES_LEAD_GENERATION' })
-});
-
-// 2. Configure step 0 (webchat install)
-await fetch(`/campaign-templates/${template.id}/steps/0`, {
-  method: 'PATCH',
+const { id } = await fetch("/automations", {
+  method: "POST",
   body: JSON.stringify({
-    stepType: 'SLG_WEBCHAT_INSTALL',
-    config: { websiteUrl: 'https://example.com', installVerified: false }
-  })
-});
-
-// 3. Spawn automation
-const automation = await fetch(`/campaign-templates/${template.id}/automation`, {
-  method: 'POST',
-  body: JSON.stringify({ name: 'My SLG Automation' })
-});
-
-// 4. Fetch with { logic, layout } contract
-const full = await fetch(`/automations/${automation.id}`);
+    name: "Win-back Campaign",
+    automationCategory: "REENGAGEMENT_CAMPAIGNS",
+  }),
+}).then((r) => r.json());
+// automation has 0 steps — add freely via POST /automations/:id/steps
 ```
 
 ### Saving canvas layout (debounced)
@@ -914,8 +850,8 @@ function onCanvasDrag(automationId: number, layout: CanvasLayout) {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     fetch(`/automations/${automationId}/layout`, {
-      method: 'PATCH',
-      body: JSON.stringify({ layout })
+      method: "PATCH",
+      body: JSON.stringify({ layout }),
     });
   }, 1000);
 }
