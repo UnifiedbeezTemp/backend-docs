@@ -14,15 +14,21 @@
 - `scheduledForCancellation`: Active until `expiresAt`, then deactivates
 - Plan limits apply to `active` count only
 
-**Billing Interval:**
+**Billing Type vs Billing Interval:**
 
-Addons inherit the billing interval of the user's **active Stripe subscription** — there is no per-addon interval selection. A user on a yearly subscription is always billed yearly for all addons (monthly price × 12, charged upfront). A user on a monthly subscription is billed monthly.
+These are two distinct fields returned on purchased addons:
+
+- **`billingType`** — the addon's pricing model. Values: `"RECURRING"` (subscription-based, renews each cycle) or `"PER_USAGE"` (one-time/usage charge). This is a static property of the addon definition.
+- **`billingInterval`** — how often the recurring billing renews. Values: `"MONTHLY"` or `"YEARLY"`. This is recorded at purchase time from the user's active Stripe subscription and stored on the addon record.
 
 ```ts
+type AddonBillingType = "RECURRING" | "PER_USAGE";
 type BillingInterval = "MONTHLY" | "YEARLY";
 ```
 
-> **Note:** The addon billing interval is derived from the actual Stripe subscription, not from `user.planBillingInterval`. These can temporarily differ when a monthly → yearly switch is scheduled but not yet applied (the switch takes effect at the end of the current monthly period). During that window, addon purchases use monthly pricing to match the live subscription.
+Addons inherit the billing interval of the user's **active Stripe subscription** at the time of purchase — there is no per-addon interval selection. A user on a yearly subscription is billed yearly for all addons (monthly price × 12, charged upfront). A user on a monthly subscription is billed monthly.
+
+> **Note:** The addon `billingInterval` is stored at purchase time from the actual Stripe subscription, not derived from `user.planBillingInterval`. These can temporarily differ when a monthly → yearly switch is scheduled but not yet applied (the switch takes effect at the end of the current monthly period). During that window, addon purchases use monthly pricing to match the live subscription.
 
 The `GET /addon/available` response includes a top-level `billingInterval` field and per-addon `effectivePriceEur` — use these directly rather than reading from the user profile separately.
 
@@ -105,36 +111,50 @@ GET /addon/purchased
     {
       "type": "EXTRA_SEAT",
       "name": "Extra Seat",
+      "description": "Add one additional team member seat",
+      "priceEur": 700,
+      "billingType": "RECURRING",
+      "billingInterval": "MONTHLY",
       "quantity": 5,
       "active": 3,
       "scheduledForCancellation": 2,
-      "priceEur": 700,
-      "billingInterval": "YEARLY"
+      "isActive": true
     },
     {
       "type": "MULTI_LANGUAGE_AI",
+      "name": "Multi-Language AI",
+      "description": "AI support for additional languages",
+      "priceEur": 1000,
+      "billingType": "RECURRING",
+      "billingInterval": "MONTHLY",
       "quantity": 3,
       "active": 2,
       "scheduledForCancellation": 1,
-      "billingInterval": "MONTHLY",
+      "isActive": true,
       "instances": [
         {
           "id": 4,
           "language": "spanish",
-          "scheduledForCancellation": false,
-          "expiresAt": "2026-03-14T11:32:23.700Z"
+          "billingInterval": "MONTHLY",
+          "purchasedAt": "2026-02-27T09:32:12.022Z",
+          "expiresAt": "2026-03-29T09:32:10.503Z",
+          "scheduledForCancellation": false
         },
         {
           "id": 6,
           "language": "french",
-          "scheduledForCancellation": true,
-          "expiresAt": "2026-03-14T11:35:10.858Z"
+          "billingInterval": "MONTHLY",
+          "purchasedAt": "2026-02-27T09:32:12.028Z",
+          "expiresAt": "2026-03-29T09:32:10.503Z",
+          "scheduledForCancellation": true
         }
       ]
     }
   ]
 }
 ```
+
+> **Note on `billingInterval`:** The top-level `billingInterval` reflects the actual interval stored on the addon records at purchase time — not the user's current plan interval. If a user purchases addons while on a monthly subscription, `billingInterval` will be `"MONTHLY"` even if they later upgrade to a yearly plan. MULTI_LANGUAGE_AI instances also expose `billingInterval` individually.
 
 ### Cancel Addon
 
@@ -162,6 +182,8 @@ Returns a prorated refund amount. The refund calculation is billing-interval-awa
 
 - Monthly: prorated over 30 days
 - Yearly: prorated over 365 days
+
+> **Refund behaviour:** The refund is issued against the most recent one-time purchase charge for the customer. The refunded amount is capped at the amount available on that charge (i.e. `Math.min(calculatedProration, chargeAmount - alreadyRefunded)`). This means the actual refunded amount may be less than the calculated proration if the original charge was itself prorated over a shorter window than the addon's full period.
 
 ### Batch Purchase
 
@@ -208,13 +230,16 @@ PATCH /addon/multi-language/preferences
 - `active`: Currently active (not scheduled for cancellation)
 - `scheduledForCancellation`: Count cancelling at end of billing cycle
 - `priceEur`: Monthly base price in pence
-- `billingInterval`: `"MONTHLY"` or `"YEARLY"` — interval at time of purchase
+- `billingType`: `"RECURRING"` or `"PER_USAGE"` — the addon's pricing model (static, from addon definition)
+- `billingInterval`: `"MONTHLY"` or `"YEARLY"` — the interval at which this addon was purchased (stored on the addon record, not derived from current plan)
 
 **MULTI_LANGUAGE_AI Only:**
 
 - `instances[]`: Array of individual addon records
 - `instances[].id`: Use for cancellation
 - `instances[].language`: Language code
+- `instances[].billingInterval`: Interval for this specific instance
+- `instances[].purchasedAt`: ISO timestamp of purchase
 - `instances[].scheduledForCancellation`: Boolean
 
 ---
@@ -332,9 +357,14 @@ For comparison UIs showing both prices side by side:
 </Text>;
 ```
 
-### Show Billing Interval on Purchased Addon
+### Show Billing Info on Purchased Addon
 
 ```tsx
+// billingType describes the pricing model ("RECURRING" or "PER_USAGE")
+// billingInterval describes the renewal cycle ("MONTHLY" or "YEARLY")
+<Badge variant={addon.billingType === "RECURRING" ? "blue" : "gray"}>
+  {addon.billingType === "RECURRING" ? "Subscription" : "One-time"}
+</Badge>
 <Badge variant={addon.billingInterval === "YEARLY" ? "purple" : "default"}>
   {addon.billingInterval === "YEARLY" ? "Yearly" : "Monthly"}
 </Badge>
