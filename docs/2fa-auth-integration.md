@@ -2,7 +2,7 @@
 sidebar_position: 4
 ---
 
-# 🔐 Two-Factor Authentication (2FA) – Frontend Integration Guide
+# Two-Factor Authentication (2FA) – Frontend Integration Guide
 
 This document describes the **end-to-end 2FA lifecycle** in UnifiedBeez, including **setup, login verification, recovery options, and management**.
 

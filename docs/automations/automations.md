@@ -147,7 +147,6 @@ Use `stepKey` to route to the correct configuration drawer or component in the U
 | `slg-webchat-install`   | `SLG_WEBCHAT_INSTALL`   | Add BeeBot to Your Website    |
 | `slg-consent-flow`      | `SLG_CONSENT_FLOW`      | Smart Consent Flow            |
 | `slg-select-channels`   | `SLG_SELECT_CHANNELS`   | Select Connected Channels     |
-| `slg-select-faqs`       | `SLG_SELECT_FAQS`       | Select FAQ Category           |
 | `slg-form-integration`  | `SLG_FORM_INTEGRATION`  | Integrate Your Form           |
 | `slg-sender-email`      | `SLG_SENDER_EMAIL`      | Configure Sender Email        |
 | `slg-campaign-list`     | `SLG_CAMPAIGN_LIST`     | Create Campaign List          |
@@ -158,10 +157,12 @@ Use `stepKey` to route to the correct configuration drawer or component in the U
 
 ### Support Escalation predefined steps (`type: "auto"`)
 
-| `stepKey`            | DB enum              | Human name                |
-| -------------------- | -------------------- | ------------------------- |
-| `se-select-channels` | `SE_SELECT_CHANNELS` | Select Connected Channels |
-| `se-select-faqs`     | `SE_SELECT_FAQS`     | Select FAQ Category       |
+| `stepKey`             | DB enum               | Human name                |
+| --------------------- | --------------------- | ------------------------- |
+| `se-select-channels`  | `SE_SELECT_CHANNELS`  | Select Connected Channels |
+| `se-select-faqs`      | `SE_SELECT_FAQS`      | Select FAQ Category       |
+| `se-faq-config`       | `SE_FAQ_CONFIG`       | FAQ Configuration         |
+| `se-campaign-preview` | `SE_CAMPAIGN_PREVIEW` | Campaign Preview          |
 
 ### Retention & Nurture predefined steps (`type: "auto"`)
 
@@ -187,7 +188,6 @@ The backend computes `completionStatus` per step based on whether the required c
 | `slg-webchat-install`   | `websiteUrl`                           | Non-empty string |
 | `slg-consent-flow`      | `method`                               | Non-empty string |
 | `slg-select-channels`   | `channelAccounts`                      | Non-empty array  |
-| `slg-select-faqs`       | `faqIds`                               | Non-empty array  |
 | `slg-form-integration`  | `embedUrl`                             | Non-empty string |
 | `slg-sender-email`      | `emailConfigId`                        | Non-null         |
 | `slg-campaign-list`     | `listIds`                              | Non-empty array  |
@@ -197,6 +197,8 @@ The backend computes `completionStatus` per step based on whether the required c
 | `slg-outreach-email`    | `emailTemplateId`                      | Non-null         |
 | `se-select-channels`    | `channelAccounts`                      | Non-empty array  |
 | `se-select-faqs`        | `faqIds`                               | Non-empty array  |
+| `se-faq-config`         | `completed`                            | `true`           |
+| `se-campaign-preview`   | `completed`                            | `true`           |
 | `rn-create-campaign`    | `tagIds`                               | Non-empty array  |
 | `rn-campaign-config`    | `leadSourceChannelId`                  | Non-null         |
 | `rn-outreach-email`     | `emailTemplateId`                      | Non-null         |
@@ -799,7 +801,7 @@ interface AutomationResponse {
 const categories = await fetch("/automations/categories").then((r) => r.json());
 const slg = categories.find((c) => c.category === "SALES_LEAD_GENERATION");
 
-// 2. Create automation (backend auto-populates 11 predefined steps)
+// 2. Create automation (backend auto-populates 10 predefined steps)
 const { id } = await fetch("/automations", {
   method: "POST",
   body: JSON.stringify({
@@ -810,7 +812,7 @@ const { id } = await fetch("/automations", {
 
 // 3. Get automation with predefined steps
 const automation = await fetch(`/automations/${id}`).then((r) => r.json());
-// automation.logic.steps → 11 steps, all type: "auto", completionStatus: "pending"
+// automation.logic.steps → 10 steps, all type: "auto", completionStatus: "pending"
 
 // 4. Configure step 0 (webchat install)
 const stepId = parseInt(automation.logic.steps[0].id);

@@ -8,8 +8,8 @@
 
 | Category                | Enum value               | `key` slug                  | Pre-populated steps |
 | ----------------------- | ------------------------ | --------------------------- | ------------------- |
-| Sales & Lead Generation | `SALES_LEAD_GENERATION`  | `sales-and-lead-generation` | 11                  |
-| Support Escalation      | `SUPPORT_ESCALATION`     | `support-escalation`        | 2                   |
+| Sales & Lead Generation | `SALES_LEAD_GENERATION`  | `sales-and-lead-generation` | 10                  |
+| Support Escalation      | `SUPPORT_ESCALATION`     | `support-escalation`        | 4                   |
 | Retention & Nurture     | `RETENTION_NURTURE`      | `retention-nurture`         | 3                   |
 | Reengagement Campaigns  | `REENGAGEMENT_CAMPAIGNS` | `reengagement-campaigns`    | 0 — blank slate     |
 
@@ -62,8 +62,10 @@ Returns the 4 static category definitions with their predefined step shapes. No 
     "key": "support-escalation",
     "label": "Support Escalation",
     "steps": [
-      { "stepIndex": 0, "type": "auto", "stepKey": "se-select-channels", "label": "Select Connected Channels", ... },
-      { "stepIndex": 1, "type": "auto", "stepKey": "se-select-faqs",     "label": "Select FAQ Category", ... }
+      { "stepIndex": 0, "type": "auto", "stepKey": "se-select-channels",   "label": "Select Connected Channels", ... },
+      { "stepIndex": 1, "type": "auto", "stepKey": "se-select-faqs",      "label": "Select FAQ Category", ... },
+      { "stepIndex": 2, "type": "auto", "stepKey": "se-faq-config",       "label": "FAQ Configuration", ... },
+      { "stepIndex": 3, "type": "auto", "stepKey": "se-campaign-preview", "label": "Campaign Preview", ... }
     ]
   },
   {
@@ -180,21 +182,20 @@ The `stepId` is the DB ID of the step (returned in `GET /automations/:id` → `l
 
 ## Step-by-Step Config Reference
 
-### SALES_LEAD_GENERATION (11 steps)
+### SALES_LEAD_GENERATION (10 steps)
 
 | stepIndex | stepKey                 | Human name                    |
 | --------- | ----------------------- | ----------------------------- |
 | 0         | `slg-webchat-install`   | Add BeeBot to Your Website    |
 | 1         | `slg-consent-flow`      | Smart Consent Flow            |
 | 2         | `slg-select-channels`   | Select Connected Channels     |
-| 3         | `slg-select-faqs`       | Select FAQ Category           |
-| 4         | `slg-form-integration`  | Integrate Your Form           |
-| 5         | `slg-sender-email`      | Configure Sender Email        |
-| 6         | `slg-campaign-list`     | Create Campaign List          |
-| 7         | `slg-beebot-handler`    | Select BeeBot Handler         |
-| 8         | `slg-crm-tags`          | CRM Tags / Keywords           |
-| 9         | `slg-tag-notifications` | CRM Tag Notification Settings |
-| 10        | `slg-outreach-email`    | Build Your Outreach Email     |
+| 3         | `slg-form-integration`  | Integrate Your Form           |
+| 4         | `slg-sender-email`      | Configure Sender Email        |
+| 5         | `slg-campaign-list`     | Create Campaign List          |
+| 6         | `slg-beebot-handler`    | Select BeeBot Handler         |
+| 7         | `slg-crm-tags`          | CRM Tags / Keywords           |
+| 8         | `slg-tag-notifications` | CRM Tag Notification Settings |
+| 9         | `slg-outreach-email`    | Build Your Outreach Email     |
 
 ---
 
@@ -266,25 +267,7 @@ Which connected channels should receive leads.
 
 ---
 
-#### Step 3 — `slg-select-faqs`
-
-Which FAQ categories are associated with this campaign.
-
-```json
-{
-  "faqIds": [10, 11, 12],
-  "categoryIds": [2]
-}
-```
-
-| Field         | Type     | Required to be "configured" |
-| ------------- | -------- | --------------------------- |
-| `faqIds`      | number[] | **yes** (min 1)             |
-| `categoryIds` | number[] | no                          |
-
----
-
-#### Step 4 — `slg-form-integration` _(stub)_
+#### Step 3 — `slg-form-integration` _(stub)_
 
 Embed an external form.
 
@@ -302,7 +285,7 @@ Embed an external form.
 
 ---
 
-#### Step 5 — `slg-sender-email`
+#### Step 4 — `slg-sender-email`
 
 Which email configuration to use for outbound messages.
 
@@ -318,7 +301,7 @@ Which email configuration to use for outbound messages.
 
 ---
 
-#### Step 6 — `slg-campaign-list`
+#### Step 5 — `slg-campaign-list`
 
 Select or create a campaign list for lead segmentation.
 
@@ -336,7 +319,7 @@ See [Campaign List Management](#campaign-list-management) below.
 
 ---
 
-#### Step 7 — `slg-beebot-handler`
+#### Step 6 — `slg-beebot-handler`
 
 Which AI assistant handles incoming leads.
 
@@ -352,7 +335,7 @@ Which AI assistant handles incoming leads.
 
 ---
 
-#### Step 8 — `slg-crm-tags`
+#### Step 7 — `slg-crm-tags`
 
 Tags/keywords to apply to captured leads.
 
@@ -370,7 +353,7 @@ Tags/keywords to apply to captured leads.
 
 ---
 
-#### Step 9 — `slg-tag-notifications`
+#### Step 8 — `slg-tag-notifications`
 
 Who gets notified and how when a tag is applied.
 
@@ -406,7 +389,7 @@ Each notification object:
 
 ---
 
-#### Step 10 — `slg-outreach-email`
+#### Step 9 — `slg-outreach-email`
 
 Which email template to send for outreach.
 
@@ -422,14 +405,58 @@ Which email template to send for outreach.
 
 ---
 
-### SUPPORT_ESCALATION (2 steps)
+### SUPPORT_ESCALATION (4 steps)
 
-| stepIndex | stepKey              | Human name                |
-| --------- | -------------------- | ------------------------- |
-| 0         | `se-select-channels` | Select Connected Channels |
-| 1         | `se-select-faqs`     | Select FAQ Category       |
+| stepIndex | stepKey               | Human name                |
+| --------- | --------------------- | ------------------------- |
+| 0         | `se-select-channels`  | Select Connected Channels |
+| 1         | `se-select-faqs`      | Select FAQ Category       |
+| 2         | `se-faq-config`       | FAQ Configuration         |
+| 3         | `se-campaign-preview` | Campaign Preview          |
 
-Same config shapes as [`slg-select-channels`](#step-2--slg-select-channels) and [`slg-select-faqs`](#step-3--slg-select-faqs).
+#### Step 0 — `se-select-channels`
+
+Same config shape as [`slg-select-channels`](#step-2--slg-select-channels).
+
+#### Step 1 — `se-select-faqs`
+
+Which FAQs to include. Fetch the user's FAQs from `GET /faq` and pass their IDs here.
+
+```json
+{
+  "faqIds": [10, 11, 12],
+  "categoryIds": [2]
+}
+```
+
+| Field         | Type     | Required to be "configured" |
+| ------------- | -------- | --------------------------- |
+| `faqIds`      | number[] | **yes** (min 1)             |
+| `categoryIds` | number[] | no                          |
+
+#### Step 2 — `se-faq-config`
+
+Screen-navigation step — no backend payload. Mark as done once the user has completed the FAQ configuration screen.
+
+```json
+{ "completed": true }
+```
+
+| Field       | Type    | Required to be "configured" |
+| ----------- | ------- | --------------------------- |
+| `completed` | boolean | **yes**                     |
+
+#### Step 3 — `se-campaign-preview`
+
+Screen-navigation step — no backend payload. Mark as done once the user has reviewed the campaign preview screen.
+
+```json
+{ "completed": true }
+```
+
+| Field       | Type    | Required to be "configured" |
+| ----------- | ------- | --------------------------- |
+| `completed` | boolean | **yes**                     |
 
 ---
 
@@ -475,7 +502,7 @@ Same config shapes as [`slg-select-channels`](#step-2--slg-select-channels) and 
 
 #### Step 2 — `rn-outreach-email`
 
-Same config shape as [`slg-outreach-email`](#step-10--slg-outreach-email).
+Same config shape as [`slg-outreach-email`](#step-9--slg-outreach-email).
 
 ---
 
@@ -487,7 +514,7 @@ Blank slate — no predefined steps. Add steps freely via `POST /automations/:id
 
 ## Campaign List Management
 
-Campaign lists are segmentation lists that can be linked to an automation.
+Campaign lists are segmentation lists. When an SLG automation fires, any lead that triggers it is automatically enrolled in every campaign list configured in that automation's Campaign List step.
 
 ### Create a campaign list
 
@@ -499,25 +526,62 @@ POST /campaign-lists
 {
   "name": "Q1 Leads",
   "description": "All leads captured in Q1",
-  "listUrl": "https://example.com/lists/q1",
-  "marketingChannelId": 2,
-  "automationId": 45
+  "listUrl": "https://example.com/lists/q1"
 }
 ```
 
-| Field                | Type   | Required | Notes                           |
-| -------------------- | ------ | -------- | ------------------------------- |
-| `name`               | string | **yes**  |                                 |
-| `description`        | string | no       |                                 |
-| `listUrl`            | string | no       | External list URL               |
-| `marketingChannelId` | number | no       | Connected channel for this list |
-| `automationId`       | number | no       | Link to an automation           |
+| Field         | Type   | Required | Notes                |
+| ------------- | ------ | -------- | -------------------- |
+| `name`        | string | **yes**  |                      |
+| `description` | string | no       |                      |
+| `listUrl`     | string | no       | Validated URL format |
 
 ### List campaign lists
 
 ```
 GET /campaign-lists
-GET /campaign-lists?automationId=45
+```
+
+Each list in the response includes a `configuredInAutomations` array — the automations that reference this list in their Campaign List step. This is read-only and derived at query time.
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Q1 Leads",
+    "description": "All leads captured in Q1",
+    "listUrl": "https://example.com/lists/q1",
+    "configuredInAutomations": [{ "id": 45, "name": "Main SLG Flow" }],
+    "createdAt": "2026-02-27T00:00:00.000Z",
+    "updatedAt": "2026-02-27T00:00:00.000Z"
+  }
+]
+```
+
+### Get campaign list members
+
+```
+GET /campaign-lists/:id/members
+```
+
+Returns all leads enrolled in the list, ordered by most recently enrolled first.
+
+```json
+[
+  {
+    "id": 7,
+    "enrolledAt": "2026-02-27T10:00:00.000Z",
+    "source": "automation",
+    "lead": {
+      "id": 101,
+      "name": "Jane Doe",
+      "email": "jane@example.com",
+      "phone": "+1234567890",
+      "source": "form",
+      "createdAt": "2026-02-20T08:00:00.000Z"
+    }
+  }
+]
 ```
 
 ### Update / Delete
@@ -650,8 +714,7 @@ interface CampaignListResponse {
   name: string;
   description?: string;
   listUrl?: string;
-  marketingChannelId?: number;
-  automationId?: number;
+  configuredInAutomations: { id: number; name: string }[];
   createdAt: string;
   updatedAt: string;
 }
