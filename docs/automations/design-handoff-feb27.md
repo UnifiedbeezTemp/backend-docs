@@ -1,3 +1,7 @@
+---
+sidebar_position: 3
+---
+
 # Design Handoff — February 27, 2026
 
 Changes and corrections for the automation templates and FAQ flows.
@@ -10,18 +14,18 @@ The **"Select FAQs"** step has been removed from the Sales & Lead Generation aut
 
 **Current step list (Sales & Lead Generation):**
 
-| # | Step |
-|---|---|
-| 1 | Add BeeBot to Your Website |
-| 2 | Smart Consent Flow |
-| 3 | Select Connected Channels |
-| 4 | Integrate Your Form |
-| 5 | Configure Sender Email |
-| 6 | Create Campaign List |
-| 7 | Select BeeBot Handler |
-| 8 | CRM Tags / Keywords |
-| 9 | CRM Tag Notification Settings |
-| 10 | Build Your Outreach Email |
+| #   | Step                          |
+| --- | ----------------------------- |
+| 1   | Add BeeBot to Your Website    |
+| 2   | Smart Consent Flow            |
+| 3   | Select Connected Channels     |
+| 4   | Integrate Your Form           |
+| 5   | Configure Sender Email        |
+| 6   | Create Campaign List          |
+| 7   | Select BeeBot Handler         |
+| 8   | CRM Tags / Keywords           |
+| 9   | CRM Tag Notification Settings |
+| 10  | Build Your Outreach Email     |
 
 Remove any "Select FAQs" or FAQ-related step from the SLG template UI entirely.
 
@@ -31,20 +35,20 @@ Remove any "Select FAQs" or FAQ-related step from the SLG template UI entirely.
 
 Step 3 of the Support & Escalation template should be renamed:
 
-| | Before | After |
-|---|---|---|
+|            | Before            | After                 |
+| ---------- | ----------------- | --------------------- |
 | Step label | Smart FAQ Mapping | **FAQ Configuration** |
 
 No change to the position or order of the step — just the label.
 
 **Full step list (Support & Escalation) for reference:**
 
-| # | Step |
-|---|---|
-| 1 | Add Marketing Channel |
-| 2 | Smart Rule |
-| 3 | **FAQ Configuration** |
-| 4 | Campaign Preview |
+| #   | Step                  |
+| --- | --------------------- |
+| 1   | Add Marketing Channel |
+| 2   | Smart Rule            |
+| 3   | **FAQ Configuration** |
+| 4   | Campaign Preview      |
 
 ---
 
@@ -84,14 +88,14 @@ Campaign lists can now hold actual leads. When a Sales & Lead Generation automat
 
 Each campaign list card should display:
 
-| Field | Notes |
-|---|---|
-| Name | Always shown |
-| Description | Show if set |
-| URL | Show if set |
+| Field         | Notes                                                                                                              |
+| ------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Name          | Always shown                                                                                                       |
+| Description   | Show if set                                                                                                        |
+| URL           | Show if set                                                                                                        |
 | Configured in | Names of any automations that have this list selected in their Campaign List step (read-only, can be zero or more) |
-| Member count | Number of leads currently enrolled in this list |
-| Created date | When the list was created |
+| Member count  | Number of leads currently enrolled in this list                                                                    |
+| Created date  | When the list was created                                                                                          |
 
 ---
 
@@ -99,11 +103,11 @@ Each campaign list card should display:
 
 Fields to collect when a user creates or edits a campaign list:
 
-| Field | Required | Input type | Notes |
-|---|---|---|---|
-| Name | Yes | Text | — |
-| Description | No | Textarea | — |
-| URL | No | URL field | Validated format |
+| Field       | Required | Input type | Notes            |
+| ----------- | -------- | ---------- | ---------------- |
+| Name        | Yes      | Text       | —                |
+| Description | No       | Textarea   | —                |
+| URL         | No       | URL field  | Validated format |
 
 ---
 
@@ -112,6 +116,7 @@ Fields to collect when a user creates or edits a campaign list:
 When the user is on step 6 of the SLG automation builder, they need to select which campaign lists this automation should enroll leads into.
 
 **What to collect:**
+
 - A multi-select picker showing all the user's existing campaign lists
 - Each list item should show: list name + description (if available)
 - The user can select one or more lists
@@ -126,13 +131,13 @@ When a user opens a specific campaign list, there should be a view (tab or secti
 
 **Table columns:**
 
-| Column | Notes |
-|---|---|
-| Name | Lead's full name |
-| Email | Lead's email address |
-| Phone | Lead's phone number (shown as "—" if not available) |
-| Source | How the lead originally entered the system (e.g. "chat", "form", "popup") |
-| Date added to list | When this lead was enrolled in this specific list |
-| Lead created date | When the lead record was first created in the system |
+| Column             | Notes                                                                     |
+| ------------------ | ------------------------------------------------------------------------- |
+| Name               | Lead's full name                                                          |
+| Email              | Lead's email address                                                      |
+| Phone              | Lead's phone number (shown as "—" if not available)                       |
+| Source             | How the lead originally entered the system (e.g. "chat", "form", "popup") |
+| Date added to list | When this lead was enrolled in this specific list                         |
+| Lead created date  | When the lead record was first created in the system                      |
 
 Leads should be ordered with the most recently enrolled first.

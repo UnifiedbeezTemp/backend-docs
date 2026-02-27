@@ -1,3 +1,7 @@
+---
+sidebar_position: 1
+---
+
 # Automations — Frontend Integration Guide
 
 This document covers the full automation API: the `{ logic, layout }` response contract, all endpoints, step types, config shapes, status lifecycle, and execution routing.

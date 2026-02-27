@@ -1,3 +1,7 @@
+---
+sidebar_position: 2
+---
+
 # Automation Categories — Frontend Integration Guide
 
 > **Architecture note:** The campaign template layer has been removed. The 4 automation categories are now fixed system definitions — not user-created objects. The frontend GETs the static category definitions and POSTs directly to create an automation. Steps are auto-populated by the backend.
