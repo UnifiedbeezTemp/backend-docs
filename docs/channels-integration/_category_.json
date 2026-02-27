@@ -1,0 +1,8 @@
+{
+  "label": "Channels integration",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Contains info on how to integrate channels on the frontend web and mobile"
+  }
+}
