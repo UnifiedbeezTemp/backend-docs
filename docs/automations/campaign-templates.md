@@ -6,12 +6,12 @@
 
 ## Overview
 
-| Category                | Enum value               | `key` slug                  | Pre-populated steps |
-| ----------------------- | ------------------------ | --------------------------- | ------------------- |
-| Sales & Lead Generation | `SALES_LEAD_GENERATION`  | `sales-and-lead-generation` | 10                  |
-| Support Escalation      | `SUPPORT_ESCALATION`     | `support-escalation`        | 4                   |
-| Retention & Nurture     | `RETENTION_NURTURE`      | `retention-nurture`         | 3                   |
-| Reengagement Campaigns  | `REENGAGEMENT_CAMPAIGNS` | `reengagement-campaigns`    | 0 — blank slate     |
+| Category                | Enum value               | `key` slug                  | Pre-populated steps                                                               |
+| ----------------------- | ------------------------ | --------------------------- | --------------------------------------------------------------------------------- |
+| Sales & Lead Generation | `SALES_LEAD_GENERATION`  | `sales-and-lead-generation` | 10                                                                                |
+| Support Escalation      | `SUPPORT_ESCALATION`     | `support-escalation`        | 4                                                                                 |
+| Retention & Nurture     | `RETENTION_NURTURE`      | `retention-nurture`         | 3                                                                                 |
+| Reengagement Campaigns  | `REENGAGEMENT_CAMPAIGNS` | `reengagement-campaigns`    | 0 — steps come from template blueprint via `POST /automation-templates/:id/apply` |
 
 ---
 
@@ -506,17 +506,30 @@ Same config shape as [`slg-outreach-email`](#step-9--slg-outreach-email).
 
 ---
 
-### REENGAGEMENT_CAMPAIGNS (0 predefined steps)
+### REENGAGEMENT_CAMPAIGNS (template-provided steps)
 
-Blank slate — no predefined steps. Add steps freely via `POST /automations/:id/steps`.
+No system-predefined steps. Instead, use `POST /automation-templates/:id/apply` to create an automation pre-populated with a template's steps and trigger. All steps created this way are fully editable — nothing is locked or required.
 
-Users typically pick a **template** before building a reengagement automation — see [Automation Templates](#automation-templates-reengagement--campaigns) below.
+Alternatively, create a blank automation via `POST /automations` and add steps freely via `POST /automations/:id/steps`.
+
+See [Automation Templates](#automation-templates-reengagement--campaigns) below for the full apply flow.
 
 ---
 
 ## Automation Templates (Reengagement & Campaigns)
 
-> **Concept:** Automation templates are distinct from the 4 category definitions above. Templates are pre-designed, selectable starting points available exclusively for the `REENGAGEMENT_CAMPAIGNS` category. They present the user with 3 curated automation ideas (as cards with a heading, description, icon, and optional video). After the user picks one, the frontend creates a blank `REENGAGEMENT_CAMPAIGNS` automation and builds the DAG from scratch — the template is informational only.
+> **Concept:** Automation templates are actual automation blueprints available exclusively for the `REENGAGEMENT_CAMPAIGNS` category. Each template ships with pre-configured triggers and a full step DAG (WAIT, SEND_MESSAGE, SMART_RULE, TAG_ACTION, etc.). When a user picks a template, a single API call creates a new `REENGAGEMENT_CAMPAIGNS` automation with all steps and triggers already in place — fully editable, nothing locked.
+
+### How templates differ from the other 3 categories
+
+|                        | SLG / SE / RN               | REENGAGEMENT_CAMPAIGNS templates               |
+| ---------------------- | --------------------------- | ---------------------------------------------- |
+| Steps predefined?      | Yes — fixed wizard steps    | Yes — but copied from template, fully editable |
+| Steps locked/required? | Yes                         | No — can be deleted, reordered, or replaced    |
+| Step creation          | Auto on `POST /automations` | On `POST /automation-templates/:id/apply`      |
+| Triggers predefined?   | No                          | Yes — pre-configured, editable afterward       |
+
+---
 
 ### List templates
 
@@ -533,36 +546,50 @@ No authentication required for listing.
   {
     "id": 1,
     "heading": "Win-back Inactive Contacts",
-    "text": "Re-engage contacts who have gone quiet. Sends a personalized email after a period of inactivity, then follows up via WhatsApp if there is no response — keeping your brand top of mind without being intrusive.",
+    "text": "Re-engage contacts who have gone quiet. Sends a personalized email after a period of inactivity, then follows up via WhatsApp if there is no response.",
     "iconUrl": null,
-    "videoUrl": null,
-    "displayOrder": 0,
     "category": "REENGAGEMENT_CAMPAIGNS",
     "isActive": true,
+    "defaultTriggers": [
+      {
+        "triggerType": "ACTIVITY_THRESHOLD",
+        "name": "Contact inactive for 30 days",
+        "conditions": [
+          { "conditionOrder": 0, "operator": "GREATER_THAN", "value": "30" }
+        ]
+      }
+    ],
+    "defaultSteps": [
+      { "stepIndex": 0, "stepType": "WAIT", "name": "Initial delay", "waitConfig": { "waitDays": 7 }, "nextStepIndex": 1 },
+      { "stepIndex": 1, "stepType": "SEND_MESSAGE", "name": "Re-engagement email", "messageConfig": { "messageType": "MARKETING_EMAIL", "customMessage": "Hi {customer.name}, we miss you!" }, "nextStepIndex": 2 },
+      { "stepIndex": 2, "stepType": "SMART_RULE", "name": "Did they open the email?", "nextStepIndex": null, "trueNextStepIndex": 3, "falseNextStepIndex": 4 },
+      { "stepIndex": 3, "stepType": "TAG_ACTION", "name": "Mark as re-engaged", "config": { "action": "ADD", "tagName": "re-engaged" }, "nextStepIndex": null },
+      { "stepIndex": 4, "stepType": "SEND_MESSAGE", "name": "WhatsApp follow-up", "messageConfig": { "messageType": "WHATSAPP", "customMessage": "Hey {customer.name}, we'd love to have you back!" }, "nextStepIndex": null }
+    ],
     "createdAt": "2026-03-01T00:00:00.000Z",
     "updatedAt": "2026-03-01T00:00:00.000Z"
   },
   {
     "id": 2,
     "heading": "Post-Purchase Upsell",
-    "text": "Strike while the iron is hot. Automatically reach out to recent buyers a few days after their purchase with a relevant upsell or cross-sell offer, driving repeat revenue with zero manual effort.",
+    "text": "Strike while the iron is hot. Reach out a few days after purchase with a relevant upsell offer.",
     "iconUrl": null,
-    "videoUrl": null,
-    "displayOrder": 1,
     "category": "REENGAGEMENT_CAMPAIGNS",
     "isActive": true,
+    "defaultTriggers": [ ... ],
+    "defaultSteps": [ ... ],
     "createdAt": "2026-03-01T00:00:00.000Z",
     "updatedAt": "2026-03-01T00:00:00.000Z"
   },
   {
     "id": 3,
     "heading": "Re-subscription Campaign",
-    "text": "Win back unsubscribed contacts with a targeted re-engagement sequence. Highlight what has changed, offer value, and make it easy to re-subscribe — turning lost contacts into active leads again.",
+    "text": "Win back unsubscribed contacts with a targeted re-engagement sequence.",
     "iconUrl": null,
-    "videoUrl": null,
-    "displayOrder": 2,
     "category": "REENGAGEMENT_CAMPAIGNS",
     "isActive": true,
+    "defaultTriggers": [ ... ],
+    "defaultSteps": [ ... ],
     "createdAt": "2026-03-01T00:00:00.000Z",
     "updatedAt": "2026-03-01T00:00:00.000Z"
   }
@@ -571,18 +598,200 @@ No authentication required for listing.
 
 **Response fields:**
 
-| Field          | Type           | Notes                                                    |
-| -------------- | -------------- | -------------------------------------------------------- |
-| `id`           | number         | Template DB ID                                           |
-| `heading`      | string         | Short title shown as the card heading                    |
-| `text`         | string         | Longer description explaining the template's purpose     |
-| `iconUrl`      | string \| null | Signed URL (2-hour TTL) for the template icon            |
-| `videoUrl`     | string \| null | Signed URL (2-hour TTL) for the template explainer video |
-| `displayOrder` | number         | Sort order (ascending)                                   |
-| `category`     | string         | Always `"REENGAGEMENT_CAMPAIGNS"` for these templates    |
-| `isActive`     | boolean        | Only `true` records are returned in listing              |
-| `createdAt`    | string         | ISO 8601                                                 |
-| `updatedAt`    | string         | ISO 8601                                                 |
+| Field             | Type           | Notes                                                                        |
+| ----------------- | -------------- | ---------------------------------------------------------------------------- |
+| `id`              | number         | Template DB ID                                                               |
+| `heading`         | string         | Short title shown as the card heading                                        |
+| `text`            | string         | Longer description explaining the template's purpose                         |
+| `iconUrl`         | string \| null | Signed URL (2-hour TTL) for the template icon                                |
+| `category`        | string         | Always `"REENGAGEMENT_CAMPAIGNS"`                                            |
+| `isActive`        | boolean        | Only `true` records are returned in listing                                  |
+| `defaultTriggers` | array \| null  | Trigger blueprints — see [Trigger blueprint shape](#trigger-blueprint-shape) |
+| `defaultSteps`    | array \| null  | Step blueprints — see [Step blueprint shape](#step-blueprint-shape)          |
+| `createdAt`       | string         | ISO 8601                                                                     |
+| `updatedAt`       | string         | ISO 8601                                                                     |
+
+---
+
+### Trigger blueprint shape
+
+Each item in `defaultTriggers`:
+
+```json
+{
+  "triggerType": "ACTIVITY_THRESHOLD",
+  "name": "Contact inactive for 30 days",
+  "conditions": [
+    { "conditionOrder": 0, "operator": "GREATER_THAN", "value": "30" }
+  ]
+}
+```
+
+| Field         | Type   | Notes                                                                            |
+| ------------- | ------ | -------------------------------------------------------------------------------- |
+| `triggerType` | string | One of the `AutomationTriggerType` enum values (see `GET /automations/metadata`) |
+| `name`        | string | Human-readable label                                                             |
+| `conditions`  | array  | `conditionOrder`, `operator` (`ConditionOperator`), `value`                      |
+
+---
+
+### Step blueprint shape
+
+Each item in `defaultSteps`:
+
+```json
+{
+  "stepIndex": 0,
+  "stepType": "WAIT",
+  "name": "Initial delay",
+  "waitConfig": { "waitDays": 7 },
+  "nextStepIndex": 1
+}
+```
+
+Steps reference each other by `stepIndex` (not DB id). When the template is applied, indices are resolved to real DB IDs.
+
+| Field                | Type           | Notes                                                                           |
+| -------------------- | -------------- | ------------------------------------------------------------------------------- |
+| `stepIndex`          | number         | 0-based position in the blueprint                                               |
+| `stepType`           | string         | `WAIT`, `SEND_MESSAGE`, `SMART_RULE`, `TAG_ACTION`, `AUTOMATION_LIST`, etc.     |
+| `name`               | string         | Human-readable step name                                                        |
+| `nextStepIndex`      | number \| null | Index of the next step (linear flow)                                            |
+| `trueNextStepIndex`  | number \| null | `SMART_RULE` only — branch taken when condition is true                         |
+| `falseNextStepIndex` | number \| null | `SMART_RULE` only — branch taken when condition is false                        |
+| `waitConfig`         | object \| null | `{ waitDays: number }` for WAIT steps                                           |
+| `messageConfig`      | object \| null | See [Send-Message step config](automations.md#send-message-step) for full shape |
+| `smartRuleConfig`    | object \| null | `{ name, conditions: [...] }` for SMART_RULE steps                              |
+| `config`             | object \| null | Generic JSON config for other step types (e.g., TAG_ACTION)                     |
+
+---
+
+### Apply a template — create automation from blueprint
+
+```
+POST /automation-templates/:id/apply
+```
+
+Requires authentication.
+
+Creates a new `REENGAGEMENT_CAMPAIGNS` automation with all steps and triggers pre-populated from the template. All created steps are fully editable — `isDefault: false`, `locked: false`, `required: false`.
+
+**Request body:**
+
+```json
+{
+  "name": "My Win-back Campaign",
+  "description": "Re-engage contacts inactive for 30+ days"
+}
+```
+
+| Field         | Type   | Required | Notes                      |
+| ------------- | ------ | -------- | -------------------------- |
+| `name`        | string | **yes**  | Name of the new automation |
+| `description` | string | no       | Optional description       |
+
+**Response `201`** — full automation object (same shape as `GET /automations/:id`):
+
+```json
+{
+  "id": 42,
+  "name": "My Win-back Campaign",
+  "description": "Re-engage contacts inactive for 30+ days",
+  "category": "REENGAGEMENT_CAMPAIGNS",
+  "isActive": false,
+  "triggers": [
+    {
+      "id": 10,
+      "triggerType": "ACTIVITY_THRESHOLD",
+      "name": "Contact inactive for 30 days",
+      "conditions": [
+        {
+          "id": 5,
+          "conditionOrder": 0,
+          "operator": "GREATER_THAN",
+          "value": "30"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": 101,
+      "stepIndex": 0,
+      "stepType": "WAIT",
+      "name": "Initial delay",
+      "isDefault": false,
+      "locked": false,
+      "required": false,
+      "nextStepId": 102,
+      "config": { "waitDays": 7 }
+    },
+    {
+      "id": 102,
+      "stepIndex": 1,
+      "stepType": "SEND_MESSAGE",
+      "name": "Re-engagement email",
+      "isDefault": false,
+      "locked": false,
+      "required": false,
+      "nextStepId": 103,
+      "config": {
+        "messageType": "MARKETING_EMAIL",
+        "customMessage": "Hi {customer.name}, we miss you!",
+        "sendingTime": "09:00"
+      }
+    },
+    {
+      "id": 103,
+      "stepIndex": 2,
+      "stepType": "SMART_RULE",
+      "name": "Did they open the email?",
+      "isDefault": false,
+      "locked": false,
+      "required": false,
+      "nextStepId": null,
+      "trueNextStepId": 104,
+      "falseNextStepId": 105,
+      "config": {
+        "conditions": [
+          {
+            "conditionOrder": 0,
+            "conditionType": "trigger",
+            "triggerType": "OPENS_EMAIL"
+          }
+        ]
+      }
+    },
+    {
+      "id": 104,
+      "stepIndex": 3,
+      "stepType": "TAG_ACTION",
+      "name": "Mark as re-engaged",
+      "isDefault": false,
+      "locked": false,
+      "required": false,
+      "nextStepId": null,
+      "config": { "action": "ADD", "tagName": "re-engaged" }
+    },
+    {
+      "id": 105,
+      "stepIndex": 4,
+      "stepType": "SEND_MESSAGE",
+      "name": "WhatsApp follow-up",
+      "isDefault": false,
+      "locked": false,
+      "required": false,
+      "nextStepId": null,
+      "config": {
+        "messageType": "WHATSAPP",
+        "customMessage": "Hey {customer.name}, we'd love to have you back!"
+      }
+    }
+  ]
+}
+```
+
+---
 
 ### Get single template
 
@@ -590,11 +799,13 @@ No authentication required for listing.
 GET /automation-templates/:id
 ```
 
-Returns the same shape as a single item in the list above.
+Returns the same shape as a single item in the list above (including `defaultTriggers` and `defaultSteps`).
+
+---
 
 ### Seed default templates (Admin)
 
-Call once to create the 3 default reengagement templates. Safe to call repeatedly — idempotent (returns existing count if already seeded).
+Call once to populate the 3 default reengagement templates. Safe to call repeatedly — idempotent.
 
 ```
 POST /automation-templates/seed-reengagement-defaults
@@ -621,6 +832,8 @@ Or if already seeded:
 }
 ```
 
+---
+
 ### Create / update templates (Admin)
 
 ```
@@ -628,7 +841,7 @@ POST /automation-templates
 PATCH /automation-templates/:id
 ```
 
-Use these to add custom template cards or update existing ones. Both require authentication.
+Use these to add custom template blueprints or update existing ones. Both require authentication.
 
 **Request body for `POST`:**
 
@@ -637,34 +850,64 @@ Use these to add custom template cards or update existing ones. Both require aut
   "heading": "Custom Template Name",
   "text": "Description of what this automation does and who it is for.",
   "category": "REENGAGEMENT_CAMPAIGNS",
-  "displayOrder": 3,
   "iconUrl": "https://cdn.example.com/icon.svg",
-  "videoUrl": "https://cdn.example.com/video.mp4"
+  "defaultTriggers": [
+    {
+      "triggerType": "MAKES_PURCHASE",
+      "name": "Contact makes a purchase",
+      "conditions": []
+    }
+  ],
+  "defaultSteps": [
+    {
+      "stepIndex": 0,
+      "stepType": "WAIT",
+      "name": "Wait 3 days",
+      "waitConfig": { "waitDays": 3 },
+      "nextStepIndex": 1
+    },
+    {
+      "stepIndex": 1,
+      "stepType": "SEND_MESSAGE",
+      "name": "Upsell email",
+      "messageConfig": {
+        "messageType": "MARKETING_EMAIL",
+        "customMessage": "Hi {customer.name}, check out our latest offers!"
+      },
+      "nextStepIndex": null
+    }
+  ]
 }
 ```
 
-Upload icon/video as files instead of URLs:
+Upload an icon as a file:
 
 ```
 POST /automation-templates/:id/icon   (multipart/form-data, field: icon)
-POST /automation-templates/:id/video  (multipart/form-data, field: video)
 ```
+
+---
 
 ### Frontend flow — template selection
 
 ```
 1. GET /automation-templates?category=REENGAGEMENT_CAMPAIGNS
-       │  ← display template cards to user
+       │  ← display template cards (heading, text, icon) to user
        ▼
-2. User picks a template (UI only — not sent to backend)
+2. User picks a template
 
-3. POST /automations { name, automationCategory: "REENGAGEMENT_CAMPAIGNS" }
-       │  ← creates blank automation (0 predefined steps)
+3. POST /automation-templates/:id/apply  { name: "My Campaign" }
+       │  ← backend creates automation + all steps + trigger in one call
        ▼
-4. Frontend builds the DAG via POST /automations/:id/steps
-       │  ← add steps based on the chosen template's suggested flow
+4. GET /automations/:id (optional — response from step 3 is the same shape)
+       │  ← user can review/edit steps
        ▼
-5. PATCH /automations/:id/status { status: "ACTIVE" }
+5. User edits steps as desired via:
+   POST   /automations/:id/steps           (add new step)
+   PATCH  /automations/:id/steps/:stepId   (edit existing step)
+   DELETE /automations/:id/steps/:stepId   (remove step)
+       ▼
+6. PATCH /automations/:id/status { status: "ACTIVE" }
 ```
 
 ---
