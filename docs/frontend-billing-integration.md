@@ -306,6 +306,171 @@ Do not show a monthly billing option to yearly users. You can check `user.planBi
 
 ---
 
+## Flow 4: Switching Plans (Same Billing Interval)
+
+Use this flow when a user upgrades or downgrades to a different plan while keeping their current billing interval (e.g. Business Monthly → Premium Monthly, or Business Yearly → Premium Yearly).
+
+This is also the flow for switching plan **and** interval at the same time (e.g. Business Monthly → Premium Yearly) — the "scheduled at period end" path only applies when switching interval on the **same** plan.
+
+### Behaviour
+
+| User state        | Result                                                                                                                  |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Trial**         | Immediate — current trial sub cancelled, new trial sub created, remaining trial days preserved                          |
+| **Active (paid)** | Immediate — prorated charge/refund issued, current sub cancelled, new sub created with next billing anchor carried over |
+
+### Step 1 — Preview the impact (recommended)
+
+Before confirming, show the user what will happen to their addons:
+
+```ts
+GET /plan/switch-preview/:planType
+Authorization: (session cookie)
+
+// e.g. GET /plan/switch-preview/PREMIUM
+
+→ {
+    "currentPlan": "BUSINESS",
+    "targetPlan": "PREMIUM",
+    "isUpgrade": true,
+    "changes": {
+      "transferred": [
+        {
+          "addonType": "EXTRA_SEAT",
+          "name": "Extra Seat",
+          "currentQuantity": 2,
+          "transferredQuantity": 2
+        }
+      ],
+      "refunded": [
+        {
+          "addonType": "EXTRA_WHATSAPP_CHANNEL",
+          "name": "Extra WhatsApp Channel",
+          "quantity": 1,
+          "estimatedRefund": 4.50,
+          "reason": "Included in new plan"
+        }
+      ],
+      "converted": []
+    },
+    "affectedChannels": {
+      "planBlocked": [],
+      "addonBlocked": [],
+      "quantityExceeded": null,
+      "totalAffected": 0
+    },
+    "totalEstimatedRefund": 4.50,
+    "newMonthlyTotal": 299.00,
+    "summary": {
+      "addonsTransferred": 1,
+      "addonsRefunded": 1,
+      "featuresConverted": 0,
+      "channelsAffected": 0
+    }
+  }
+```
+
+Display a confirmation screen summarising the addon changes and the prorated charge or refund before the user confirms.
+
+### Step 2 — Execute the switch
+
+```ts
+POST /plan/switch
+Content-Type: application/json
+
+{
+  "planType": "PREMIUM",
+  "billingInterval": "MONTHLY"   // pass the user's current interval to keep it the same
+}
+
+→ {
+    "message": "Plan switch successful",
+    "newPlan": "PREMIUM",
+    "previousPlan": "BUSINESS",
+    "transferredAddons": 1,
+    "cancelledAddons": 1
+  }
+```
+
+The switch is immediate — the user's plan is updated in the response. No polling required.
+
+> **Note:** If the user is also changing their billing interval (e.g. Business Monthly → Premium Yearly), pass the target `billingInterval` in the same call. The switch is still immediate; the "scheduled at period end" path only applies to same-plan interval changes (Monthly → Yearly on the same plan).
+
+### Downgrade constraints
+
+On a downgrade, the backend validates before switching:
+
+- **Contact limit**: if the user has more contacts than the new plan allows (including any contact packs), the switch is blocked.
+
+```json
+// 400
+{
+  "statusCode": 400,
+  "message": "Cannot downgrade: You have 1200 contacts but the new plan allows 500. Delete contacts or purchase contact packs first.",
+  "error": "Bad Request"
+}
+```
+
+- **Yearly → Monthly** is still blocked regardless of plan change:
+
+```json
+// 400
+{
+  "error": "YEARLY_DOWNGRADE_NOT_ALLOWED",
+  "message": "You cannot switch from a yearly plan to monthly billing. Please cancel your subscription first and re-subscribe on a monthly plan."
+}
+```
+
+### UI pattern
+
+```tsx
+async function handlePlanSwitch(targetPlan: PlanType) {
+  // 1. Preview
+  const preview = await api.get(`/plan/switch-preview/${targetPlan}`);
+
+  // 2. Show confirmation with addon impact + prorated amount
+  const confirmed = await showConfirmDialog({
+    addonsTransferred: preview.summary.addonsTransferred,
+    addonsRefunded: preview.summary.addonsRefunded,
+    estimatedRefund: preview.totalEstimatedRefund,
+    newMonthlyTotal: preview.newMonthlyTotal,
+  });
+
+  if (!confirmed) return;
+
+  // 3. Execute
+  await api.post("/plan/switch", {
+    planType: targetPlan,
+    billingInterval: user.planBillingInterval, // keep current interval
+  });
+
+  // 4. Refresh user profile to get updated plan
+  await refreshUserProfile();
+}
+```
+
+### Flow diagram
+
+```
+PLAN SWITCH (same billing interval)
+────────────────────────────────────
+User selects a different plan (e.g. Business → Premium)
+        │
+        ▼
+GET /plan/switch-preview/PREMIUM
+        │ returns addon impact + estimated prorated amounts
+        ▼
+Show confirmation screen
+        │ user confirms
+        ▼
+POST /plan/switch { planType: "PREMIUM", billingInterval: "MONTHLY" }
+        │ immediate: prorated charge/refund + new subscription created
+        ▼
+Refresh user profile → show updated plan
+```
+
+---
+
 ## Other Billing Endpoints
 
 ### Subscription status
@@ -550,8 +715,8 @@ POST /payment/update-payment-method { payment_method_id }
 Show updated card details
 
 
-MONTHLY → YEARLY SWITCH
-────────────────────────
+MONTHLY → YEARLY SWITCH (same plan)
+────────────────────────────────────
 User selects yearly billing
         │
         ▼
@@ -562,6 +727,23 @@ Show pending switch banner with effective date
         │ (automatic — no frontend action needed)
         ▼
 Webhook fires at period end → yearly subscription created
+
+
+PLAN SWITCH (same billing interval, or plan + interval together)
+────────────────────────────────────────────────────────────────
+User selects a different plan
+        │
+        ▼
+GET /plan/switch-preview/:planType
+        │ returns addon impact + prorated amounts
+        ▼
+Show confirmation screen
+        │ user confirms
+        ▼
+POST /plan/switch { planType, billingInterval: (current or target) }
+        │ immediate: prorated charge/refund, new subscription created
+        ▼
+Refresh user profile → show updated plan
 ```
 
 ---
