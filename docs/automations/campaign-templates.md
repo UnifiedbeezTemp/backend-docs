@@ -1,7 +1,3 @@
----
-sidebar_position: 2
----
-
 # Automation Categories — Frontend Integration Guide
 
 > **Architecture note:** The campaign template layer has been removed. The 4 automation categories are now fixed system definitions — not user-created objects. The frontend GETs the static category definitions and POSTs directly to create an automation. Steps are auto-populated by the backend.
@@ -513,6 +509,163 @@ Same config shape as [`slg-outreach-email`](#step-9--slg-outreach-email).
 ### REENGAGEMENT_CAMPAIGNS (0 predefined steps)
 
 Blank slate — no predefined steps. Add steps freely via `POST /automations/:id/steps`.
+
+Users typically pick a **template** before building a reengagement automation — see [Automation Templates](#automation-templates-reengagement--campaigns) below.
+
+---
+
+## Automation Templates (Reengagement & Campaigns)
+
+> **Concept:** Automation templates are distinct from the 4 category definitions above. Templates are pre-designed, selectable starting points available exclusively for the `REENGAGEMENT_CAMPAIGNS` category. They present the user with 3 curated automation ideas (as cards with a heading, description, icon, and optional video). After the user picks one, the frontend creates a blank `REENGAGEMENT_CAMPAIGNS` automation and builds the DAG from scratch — the template is informational only.
+
+### List templates
+
+```
+GET /automation-templates?category=REENGAGEMENT_CAMPAIGNS
+```
+
+No authentication required for listing.
+
+**Response `200`**
+
+```json
+[
+  {
+    "id": 1,
+    "heading": "Win-back Inactive Contacts",
+    "text": "Re-engage contacts who have gone quiet. Sends a personalized email after a period of inactivity, then follows up via WhatsApp if there is no response — keeping your brand top of mind without being intrusive.",
+    "iconUrl": null,
+    "videoUrl": null,
+    "displayOrder": 0,
+    "category": "REENGAGEMENT_CAMPAIGNS",
+    "isActive": true,
+    "createdAt": "2026-03-01T00:00:00.000Z",
+    "updatedAt": "2026-03-01T00:00:00.000Z"
+  },
+  {
+    "id": 2,
+    "heading": "Post-Purchase Upsell",
+    "text": "Strike while the iron is hot. Automatically reach out to recent buyers a few days after their purchase with a relevant upsell or cross-sell offer, driving repeat revenue with zero manual effort.",
+    "iconUrl": null,
+    "videoUrl": null,
+    "displayOrder": 1,
+    "category": "REENGAGEMENT_CAMPAIGNS",
+    "isActive": true,
+    "createdAt": "2026-03-01T00:00:00.000Z",
+    "updatedAt": "2026-03-01T00:00:00.000Z"
+  },
+  {
+    "id": 3,
+    "heading": "Re-subscription Campaign",
+    "text": "Win back unsubscribed contacts with a targeted re-engagement sequence. Highlight what has changed, offer value, and make it easy to re-subscribe — turning lost contacts into active leads again.",
+    "iconUrl": null,
+    "videoUrl": null,
+    "displayOrder": 2,
+    "category": "REENGAGEMENT_CAMPAIGNS",
+    "isActive": true,
+    "createdAt": "2026-03-01T00:00:00.000Z",
+    "updatedAt": "2026-03-01T00:00:00.000Z"
+  }
+]
+```
+
+**Response fields:**
+
+| Field          | Type           | Notes                                                    |
+| -------------- | -------------- | -------------------------------------------------------- |
+| `id`           | number         | Template DB ID                                           |
+| `heading`      | string         | Short title shown as the card heading                    |
+| `text`         | string         | Longer description explaining the template's purpose     |
+| `iconUrl`      | string \| null | Signed URL (2-hour TTL) for the template icon            |
+| `videoUrl`     | string \| null | Signed URL (2-hour TTL) for the template explainer video |
+| `displayOrder` | number         | Sort order (ascending)                                   |
+| `category`     | string         | Always `"REENGAGEMENT_CAMPAIGNS"` for these templates    |
+| `isActive`     | boolean        | Only `true` records are returned in listing              |
+| `createdAt`    | string         | ISO 8601                                                 |
+| `updatedAt`    | string         | ISO 8601                                                 |
+
+### Get single template
+
+```
+GET /automation-templates/:id
+```
+
+Returns the same shape as a single item in the list above.
+
+### Seed default templates (Admin)
+
+Call once to create the 3 default reengagement templates. Safe to call repeatedly — idempotent (returns existing count if already seeded).
+
+```
+POST /automation-templates/seed-reengagement-defaults
+```
+
+Requires authentication.
+
+**Response `201`**
+
+```json
+{
+  "message": "Reengagement templates seeded successfully",
+  "count": 3,
+  "templates": [ ... ]
+}
+```
+
+Or if already seeded:
+
+```json
+{
+  "message": "Reengagement templates already seeded",
+  "count": 3
+}
+```
+
+### Create / update templates (Admin)
+
+```
+POST /automation-templates
+PATCH /automation-templates/:id
+```
+
+Use these to add custom template cards or update existing ones. Both require authentication.
+
+**Request body for `POST`:**
+
+```json
+{
+  "heading": "Custom Template Name",
+  "text": "Description of what this automation does and who it is for.",
+  "category": "REENGAGEMENT_CAMPAIGNS",
+  "displayOrder": 3,
+  "iconUrl": "https://cdn.example.com/icon.svg",
+  "videoUrl": "https://cdn.example.com/video.mp4"
+}
+```
+
+Upload icon/video as files instead of URLs:
+
+```
+POST /automation-templates/:id/icon   (multipart/form-data, field: icon)
+POST /automation-templates/:id/video  (multipart/form-data, field: video)
+```
+
+### Frontend flow — template selection
+
+```
+1. GET /automation-templates?category=REENGAGEMENT_CAMPAIGNS
+       │  ← display template cards to user
+       ▼
+2. User picks a template (UI only — not sent to backend)
+
+3. POST /automations { name, automationCategory: "REENGAGEMENT_CAMPAIGNS" }
+       │  ← creates blank automation (0 predefined steps)
+       ▼
+4. Frontend builds the DAG via POST /automations/:id/steps
+       │  ← add steps based on the chosen template's suggested flow
+       ▼
+5. PATCH /automations/:id/status { status: "ACTIVE" }
+```
 
 ---
 

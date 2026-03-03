@@ -1,7 +1,3 @@
----
-sidebar_position: 1
----
-
 # Automations — Frontend Integration Guide
 
 This document covers the full automation API: the `{ logic, layout }` response contract, all endpoints, step types, config shapes, status lifecycle, and execution routing.
@@ -235,6 +231,19 @@ step[order=N] → nextStepIds: []   // last step
 
 ### `send-message`
 
+The send-message step supports three channels. Set `messageType` to select the channel — the remaining fields differ per channel.
+
+| Field             | Type           | Required               | Notes                                          |
+| ----------------- | -------------- | ---------------------- | ---------------------------------------------- |
+| `messageType`     | string         | **yes**                | `"MARKETING_EMAIL"` \| `"WHATSAPP"` \| `"SMS"` |
+| `emailTemplateId` | number \| null | for `MARKETING_EMAIL`  | ID of a saved email template                   |
+| `customMessage`   | string \| null | for `WHATSAPP` / `SMS` | Plain text or template variables               |
+| `sendingTime`     | string \| null | no                     | HH:MM preferred send time (e.g. `"09:00"`)     |
+
+#### Channel: MARKETING_EMAIL
+
+Use `emailTemplateId` to send a pre-built template, or `customMessage` to send ad-hoc HTML/text.
+
 ```json
 {
   "messageType": "MARKETING_EMAIL",
@@ -244,12 +253,45 @@ step[order=N] → nextStepIds: []   // last step
 }
 ```
 
-| Field             | Type           | `messageType` values                           |
-| ----------------- | -------------- | ---------------------------------------------- |
-| `messageType`     | string         | `"MARKETING_EMAIL"` \| `"WHATSAPP"` \| `"SMS"` |
-| `emailTemplateId` | number \| null | Used when `messageType = "MARKETING_EMAIL"`    |
-| `customMessage`   | string \| null | Used for WhatsApp / SMS                        |
-| `sendingTime`     | string \| null | HH:MM preferred send time                      |
+#### Channel: WHATSAPP
+
+Set `customMessage` to the message body. The backend resolves the active WhatsApp account for the user. `sendingTime` is respected if set.
+
+```json
+{
+  "messageType": "WHATSAPP",
+  "emailTemplateId": null,
+  "customMessage": "Hi {customer.name}, we miss you! Check out what's new: {business.name}",
+  "sendingTime": null
+}
+```
+
+#### Channel: SMS
+
+Same as WhatsApp — `customMessage` is the message body. The recipient's phone number is resolved from their contact record.
+
+```json
+{
+  "messageType": "SMS",
+  "emailTemplateId": null,
+  "customMessage": "Hey {customer.name}, here's an exclusive offer just for you.",
+  "sendingTime": "10:00"
+}
+```
+
+#### Variable Interpolation
+
+All three channels support the following variables in `customMessage`:
+
+| Variable            | Resolves to                              |
+| ------------------- | ---------------------------------------- |
+| `{customer.name}`   | Contact's full name                      |
+| `{customer.email}`  | Contact's email address                  |
+| `{customer.phone}`  | Contact's phone number                   |
+| `{customer.source}` | Lead source (e.g. `"form"`, `"webchat"`) |
+| `{business.name}`   | Your business name                       |
+
+Unknown variables are left as-is in the sent message.
 
 ---
 
@@ -341,17 +383,45 @@ Refer to the [Automation Categories guide](./campaign-templates.md) for the full
 
 ## Trigger Types
 
-| Value                  | Meaning                         |
-| ---------------------- | ------------------------------- |
-| `CONTACT_SUBSCRIBED`   | Contact joins a campaign        |
-| `CONTACT_UNSUBSCRIBED` | Contact leaves a campaign       |
-| `TAG_APPLIED`          | A tag is applied to a contact   |
-| `TAG_REMOVED`          | A tag is removed from a contact |
-| `INACTIVITY`           | Contact inactive for N days     |
-| `FORM_SUBMITTED`       | Form submission received        |
-| `CHAT_INITIATED`       | Chat started                    |
-| `FAQ_TRIGGERED`        | FAQ trigger fired               |
-| `MANUAL`               | Manually triggered              |
+Use `GET /automations/metadata` to get the full list with labels and groups. The table below is a reference — always prefer the live endpoint for building UI.
+
+| Group               | Value                     | Meaning                               |
+| ------------------- | ------------------------- | ------------------------------------- |
+| Email Interactions  | `OPENS_EMAIL`             | Contact opens an email                |
+| Email Interactions  | `READS_EMAIL`             | Contact reads an email (tracked read) |
+| Email Interactions  | `CLICKS_LINK_IN_EMAIL`    | Contact clicks a link in an email     |
+| Email Interactions  | `REPLIES_EMAIL`           | Contact replies to an email           |
+| Email Interactions  | `FORWARDS_EMAIL`          | Contact forwards an email             |
+| Email Interactions  | `SHARES_EMAIL`            | Contact shares an email               |
+| Subscription / List | `SUBSCRIBES_TO_LIST`      | Contact joins a campaign list         |
+| Subscription / List | `UNSUBSCRIBES_FROM_LIST`  | Contact leaves a campaign list        |
+| Web & Form          | `WEBPAGE_VISITED`         | Contact visits a tracked webpage      |
+| Web & Form          | `SUBMITS_FORM`            | Contact submits a form                |
+| Web & Form          | `FILE_DOWNLOADED`         | Contact downloads a file              |
+| Web & Form          | `DISMISSES_SITE_MESSAGE`  | Contact dismisses a site message      |
+| Customer Data       | `TAG_ADDED`               | A tag is added to a contact           |
+| Customer Data       | `TAG_REMOVED`             | A tag is removed from a contact       |
+| Customer Data       | `CONTACT_FIELD_CHANGES`   | A contact field value changes         |
+| Customer Data       | `CONTACT_JUMPED_TO`       | Contact is moved to a specific stage  |
+| Customer Data       | `STATUS_CHANGED`          | Contact status changes                |
+| Deals & Pipeline    | `DEAL_FIELD_CHANGES`      | A deal field changes                  |
+| Deals & Pipeline    | `ACCOUNT_FIELD_CHANGES`   | An account field changes              |
+| Deals & Pipeline    | `ENTERS_PIPELINE`         | Contact enters a pipeline             |
+| Deals & Pipeline    | `DEAL_STAGE_OCCURS`       | Deal reaches a stage                  |
+| Deals & Pipeline    | `DEAL_STATUS_CHANGES`     | Deal status changes                   |
+| Deals & Pipeline    | `DEAL_VALUE_CHANGES`      | Deal value changes                    |
+| Deals & Pipeline    | `DEAL_OWNER_CHANGES`      | Deal owner changes                    |
+| Deals & Pipeline    | `SENTIMENT_CHANGES`       | AI-detected sentiment changes         |
+| Commerce            | `CONVERSION_OCCURS`       | A conversion event fires              |
+| Commerce            | `MAKES_PURCHASE`          | Contact makes a purchase              |
+| System              | `EVENT_RECORDED`          | A custom event is recorded            |
+| System              | `RSS_BASED`               | RSS feed update                       |
+| System              | `WHATSAPP_FLOW_COMPLETED` | WhatsApp flow completed               |
+| System              | `TASK_COMPLETED`          | A task is completed                   |
+| System              | `FAQ_TRIGGERED`           | An FAQ is triggered by a contact      |
+| System              | `SMART_RULE_MET`          | A smart rule condition is met         |
+| Time & Activity     | `TIME_BASED`              | Scheduled / time-based trigger        |
+| Time & Activity     | `ACTIVITY_THRESHOLD`      | Contact activity crosses a threshold  |
 
 ---
 
@@ -364,6 +434,233 @@ All endpoints require a valid session / JWT.
 ```
 Authorization: Bearer <token>
 ```
+
+---
+
+### Get automation builder metadata
+
+```
+GET /automations/metadata
+```
+
+Returns all available **triggers**, **action steps**, **condition steps**, **condition operators**, and **logic options** as structured lists. No DB query — always the same static response. Use this to populate dropdowns and palettes in the automation builder so the frontend never has to hard-code these values.
+
+**Response `200`**
+
+```json
+{
+  "triggers": [
+    {
+      "value": "OPENS_EMAIL",
+      "label": "Opens Email",
+      "group": "Email Interactions"
+    },
+    {
+      "value": "READS_EMAIL",
+      "label": "Reads Email",
+      "group": "Email Interactions"
+    },
+    {
+      "value": "CLICKS_LINK_IN_EMAIL",
+      "label": "Clicks Link In Email",
+      "group": "Email Interactions"
+    },
+    {
+      "value": "REPLIES_EMAIL",
+      "label": "Replies Email",
+      "group": "Email Interactions"
+    },
+    {
+      "value": "FORWARDS_EMAIL",
+      "label": "Forwards Email",
+      "group": "Email Interactions"
+    },
+    {
+      "value": "SHARES_EMAIL",
+      "label": "Shares Email",
+      "group": "Email Interactions"
+    },
+    {
+      "value": "SUBSCRIBES_TO_LIST",
+      "label": "Subscribes To List",
+      "group": "Subscription / List"
+    },
+    {
+      "value": "UNSUBSCRIBES_FROM_LIST",
+      "label": "Unsubscribes From List",
+      "group": "Subscription / List"
+    },
+    {
+      "value": "WEBPAGE_VISITED",
+      "label": "Webpage Visited",
+      "group": "Web & Form"
+    },
+    { "value": "SUBMITS_FORM", "label": "Submits Form", "group": "Web & Form" },
+    {
+      "value": "FILE_DOWNLOADED",
+      "label": "File Downloaded",
+      "group": "Web & Form"
+    },
+    {
+      "value": "DISMISSES_SITE_MESSAGE",
+      "label": "Dismisses Site Message",
+      "group": "Web & Form"
+    },
+    { "value": "TAG_ADDED", "label": "Tag Added", "group": "Customer Data" },
+    {
+      "value": "TAG_REMOVED",
+      "label": "Tag Removed",
+      "group": "Customer Data"
+    },
+    {
+      "value": "CONTACT_FIELD_CHANGES",
+      "label": "Contact Field Changes",
+      "group": "Customer Data"
+    },
+    {
+      "value": "CONTACT_JUMPED_TO",
+      "label": "Contact Jumped To",
+      "group": "Customer Data"
+    },
+    {
+      "value": "STATUS_CHANGED",
+      "label": "Status Changed",
+      "group": "Customer Data"
+    },
+    {
+      "value": "DEAL_FIELD_CHANGES",
+      "label": "Deal Field Changes",
+      "group": "Deals & Pipeline"
+    },
+    {
+      "value": "ACCOUNT_FIELD_CHANGES",
+      "label": "Account Field Changes",
+      "group": "Deals & Pipeline"
+    },
+    {
+      "value": "ENTERS_PIPELINE",
+      "label": "Enters Pipeline",
+      "group": "Deals & Pipeline"
+    },
+    {
+      "value": "DEAL_STAGE_OCCURS",
+      "label": "Deal Stage Occurs",
+      "group": "Deals & Pipeline"
+    },
+    {
+      "value": "DEAL_STATUS_CHANGES",
+      "label": "Deal Status Changes",
+      "group": "Deals & Pipeline"
+    },
+    {
+      "value": "DEAL_VALUE_CHANGES",
+      "label": "Deal Value Changes",
+      "group": "Deals & Pipeline"
+    },
+    {
+      "value": "DEAL_OWNER_CHANGES",
+      "label": "Deal Owner Changes",
+      "group": "Deals & Pipeline"
+    },
+    {
+      "value": "SENTIMENT_CHANGES",
+      "label": "Sentiment Changes",
+      "group": "Deals & Pipeline"
+    },
+    {
+      "value": "CONVERSION_OCCURS",
+      "label": "Conversion Occurs",
+      "group": "Commerce"
+    },
+    {
+      "value": "MAKES_PURCHASE",
+      "label": "Makes Purchase",
+      "group": "Commerce"
+    },
+    { "value": "EVENT_RECORDED", "label": "Event Recorded", "group": "System" },
+    { "value": "RSS_BASED", "label": "Rss Based", "group": "System" },
+    {
+      "value": "WHATSAPP_FLOW_COMPLETED",
+      "label": "Whatsapp Flow Completed",
+      "group": "System"
+    },
+    { "value": "TASK_COMPLETED", "label": "Task Completed", "group": "System" },
+    { "value": "FAQ_TRIGGERED", "label": "Faq Triggered", "group": "System" },
+    { "value": "SMART_RULE_MET", "label": "Smart Rule Met", "group": "System" },
+    {
+      "value": "TIME_BASED",
+      "label": "Time Based",
+      "group": "Time & Activity"
+    },
+    {
+      "value": "ACTIVITY_THRESHOLD",
+      "label": "Activity Threshold",
+      "group": "Time & Activity"
+    }
+  ],
+  "actions": [
+    {
+      "value": "SEND_MESSAGE",
+      "stepKey": "send-message",
+      "label": "Send Message",
+      "type": "action"
+    },
+    { "value": "WAIT", "stepKey": "wait", "label": "Wait", "type": "action" },
+    {
+      "value": "AUTOMATION_LIST",
+      "stepKey": "automation-list",
+      "label": "Automation List",
+      "type": "action"
+    },
+    {
+      "value": "TAG_ACTION",
+      "stepKey": "tag-action",
+      "label": "Tag Action",
+      "type": "action"
+    },
+    {
+      "value": "STATUS_CHANGE",
+      "stepKey": "status-change",
+      "label": "Status Change",
+      "type": "action"
+    }
+  ],
+  "conditions": [
+    {
+      "value": "SMART_RULE",
+      "stepKey": "smart-rule",
+      "label": "Smart Rule",
+      "type": "condition"
+    },
+    {
+      "value": "TRIGGER_CONDITION",
+      "stepKey": "trigger-condition",
+      "label": "Trigger Condition",
+      "type": "condition"
+    }
+  ],
+  "conditionOperators": [
+    { "value": "EQUALS", "label": "Equals" },
+    { "value": "NOT_EQUALS", "label": "Not Equals" },
+    { "value": "CONTAINS", "label": "Contains" },
+    { "value": "NOT_CONTAINS", "label": "Not Contains" },
+    { "value": "STARTS_WITH", "label": "Starts With" },
+    { "value": "ENDS_WITH", "label": "Ends With" },
+    { "value": "GREATER_THAN", "label": "Greater Than" },
+    { "value": "LESS_THAN", "label": "Less Than" },
+    { "value": "IS_EMPTY", "label": "Is Empty" },
+    { "value": "IS_NOT_EMPTY", "label": "Is Not Empty" },
+    { "value": "IS_TRUE", "label": "Is True" },
+    { "value": "IS_FALSE", "label": "Is False" }
+  ],
+  "conditionLogic": [
+    { "value": "AND", "label": "All conditions must match (AND)" },
+    { "value": "OR", "label": "Any condition must match (OR)" }
+  ]
+}
+```
+
+**Trigger groups** — use the `group` field to render triggers in categorized sections in the UI.
 
 ---
 
