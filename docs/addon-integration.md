@@ -8,6 +8,11 @@
 - **Feature**: CRM_CALENDAR_SYNC, ECOMMERCE_PACK (binary - you have it or don't)
 - **Special**: MULTI_LANGUAGE_AI (one instance per language)
 
+**Addon Categories** (returned as `category` on every addon in `GET /addon/available`):
+
+- **`USAGE_PACK`**: CONTACT*PACK*_, EMAIL*PACK*_, AI*COMPUTE_PACK*\* — purchased reactively when a usage limit is hit; shown on a dedicated limit-reached purchase screen
+- **`FEATURE`**: All other addons — purchased proactively from the main add-ons screen
+
 **Addon States:**
 
 - `active`: Currently usable
@@ -51,6 +56,7 @@ GET /addon/available
     {
       "id": 1,
       "type": "EXTRA_SEAT",
+      "category": "FEATURE",
       "name": "Extra Seat",
       "priceEur": 700,
       "yearlyPriceEur": 8400,
@@ -59,6 +65,20 @@ GET /addon/available
       "basePlanAllowance": 5,
       "maxAllowed": 10,
       "remainingPurchasable": 2,
+      "isIncludedInPlan": false
+    },
+    {
+      "id": 8,
+      "type": "CONTACT_PACK_5K",
+      "category": "USAGE_PACK",
+      "name": "Contact Pack +5K",
+      "priceEur": 1500,
+      "yearlyPriceEur": 18000,
+      "effectivePriceEur": 18000,
+      "currentQuantity": 0,
+      "basePlanAllowance": 0,
+      "maxAllowed": null,
+      "remainingPurchasable": null,
       "isIncludedInPlan": false
     }
   ]
@@ -219,6 +239,7 @@ PATCH /addon/multi-language/preferences
 **`GET /addon/available` (available addons):**
 
 - `billingInterval` — top-level, user's current plan billing interval
+- `category` — `"USAGE_PACK"` or `"FEATURE"` (see Addon Categories above)
 - `priceEur` — monthly base price in pence, always present
 - `yearlyPriceEur` — `priceEur × 12`, always present
 - `effectivePriceEur` — actual charge amount based on billing interval; use this for the primary price display
@@ -385,6 +406,19 @@ For comparison UIs showing both prices side by side:
     </Row>
   ));
 }
+```
+
+### Differentiating Usage Packs
+
+Usage packs (contact, email, AI compute) are purchased on a separate screen when users hit limits. Filter by `category` to separate them:
+
+```tsx
+const { addons } = await getAvailableAddons();
+const featureAddons = addons.filter((a) => a.category === "FEATURE");
+const usagePackAddons = addons.filter((a) => a.category === "USAGE_PACK");
+
+// Render featureAddons on the main Add-ons screen
+// Render usagePackAddons on the limit-reached upsell screen
 ```
 
 ### Purchase Flow
