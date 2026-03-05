@@ -14,6 +14,7 @@ interface AutomationResponse {
   name: string;
   description: string | null;
   category: CategorySlug | null; // kebab-case string, see Category Slugs
+  campaignListId: number | null; // RC automations only — the Campaign List that scopes this automation's contact pool
   status: AutomationStatus; // "DRAFT" | "ACTIVE" | "PAUSED" | "ARCHIVED"
   logicVersion: string; // e.g. "1.0.0"
   logic: {
@@ -343,13 +344,17 @@ Only one of `waitMinutes`, `waitHours`, `waitDays` needs to be set.
   "sourceCampaignId": null,
   "sourceTagGroupId": null,
   "sourceFaqGroupId": null,
-  "destinationCampaignId": 7,
+  "destinationCampaignId": null,
   "destinationTagGroupId": null,
-  "destinationFaqGroupId": null
+  "destinationFaqGroupId": null,
+  "sourceCampaignListId": null,
+  "destinationCampaignListId": 5
 }
 ```
 
 **Action values:** `ADD_TO_CAMPAIGN`, `REMOVE_FROM_CAMPAIGN`, `COPY_TO_CAMPAIGN`, `MOVE_BETWEEN_TAG_GROUPS`, `MOVE_BETWEEN_FAQ_GROUPS`
+
+For `REENGAGEMENT_CAMPAIGNS` automations, use `sourceCampaignListId` / `destinationCampaignListId` (user-created Campaign Lists). The legacy `sourceCampaignId` / `destinationCampaignId` fields remain for backward compatibility with older automations.
 
 ---
 
@@ -698,6 +703,7 @@ POST /automations
   "name": "My SLG Setup",
   "automationCategory": "SALES_LEAD_GENERATION",
   "description": "Optional",
+  "campaignListId": null,
   "startType": "TRIGGER_BASED",
   "sourceFilterEnabled": false,
   "allowedSources": [],
@@ -710,7 +716,7 @@ POST /automations
   "allowedStatuses": [],
   "triggers": [
     {
-      "triggerType": "INACTIVITY",
+      "triggerType": "ACTIVITY_THRESHOLD",
       "name": "30-day inactive",
       "conditions": [
         {
@@ -729,10 +735,11 @@ POST /automations
 **Constraints:**
 
 - `name` and `automationCategory` are required.
+- `campaignListId` is optional — for `REENGAGEMENT_CAMPAIGNS` only; scopes the `ACTIVITY_THRESHOLD` trigger to contacts on that list.
 - `triggers` is optional — max 1 if provided.
 - `steps` is optional — these are appended after the auto-created predefined steps.
 - For `SALES_LEAD_GENERATION`, `SUPPORT_ESCALATION`, `RETENTION_NURTURE`: backend auto-creates predefined steps with `isTemplatePrefilled: true`.
-- For `REENGAGEMENT_CAMPAIGNS`: blank slate — add steps manually afterward.
+- For `REENGAGEMENT_CAMPAIGNS`: blank slate — use `POST /automation-templates/:id/apply` (recommended) or add steps manually afterward.
 
 **Response `201`** — raw automation record. Fetch `GET /automations/:id` for the full `{ logic, layout }` output.
 
@@ -1077,6 +1084,7 @@ interface AutomationResponse {
   name: string;
   description: string | null;
   category: CategorySlug | null;
+  campaignListId: number | null; // RC automations only
   status: AutomationStatus;
   logicVersion: string;
   logic: {
@@ -1131,17 +1139,29 @@ await fetch(`/automations/${id}/status`, {
 });
 ```
 
-### Create a blank Reengagement automation
+### Create a Reengagement automation from a template
 
 ```typescript
-const { id } = await fetch("/automations", {
-  method: "POST",
-  body: JSON.stringify({
-    name: "Win-back Campaign",
-    automationCategory: "REENGAGEMENT_CAMPAIGNS",
-  }),
-}).then((r) => r.json());
-// automation has 0 steps — add freely via POST /automations/:id/steps
+// 1. Fetch available templates for the RC category
+const templates = await fetch(
+  "/automation-templates?category=REENGAGEMENT_CAMPAIGNS"
+).then((r) => r.json());
+
+// 2. Apply a template (creates automation + pre-fills steps + trigger)
+//    Pass campaignListId to scope the trigger to contacts on that list
+const automation = await fetch(
+  `/automation-templates/${templates[0].id}/apply`,
+  {
+    method: "POST",
+    body: JSON.stringify({
+      name: "Win-back Campaign",
+      description: "Re-engage contacts inactive for 30+ days",
+      campaignListId: 5, // only contacts on list #5 will be evaluated
+    }),
+  }
+).then((r) => r.json());
+// automation.campaignListId === 5
+// automation.logic.steps → pre-filled from template, fully editable
 ```
 
 ### Saving canvas layout (debounced)

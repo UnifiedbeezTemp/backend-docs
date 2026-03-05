@@ -147,6 +147,7 @@ The backend auto-creates all predefined steps for the category with `isTemplateP
 | `name`               | **yes**  |                                                                                        |
 | `automationCategory` | **yes**  | One of the 4 enum values                                                               |
 | `description`        | no       |                                                                                        |
+| `campaignListId`     | no       | For `REENGAGEMENT_CAMPAIGNS` only — scopes the trigger to contacts on this list        |
 | `startType`          | no       | `"TRIGGER_BASED"` (default) or `"ACTION_BASED"`                                        |
 | `triggers`           | no       | Max 1. Can be added later via `PUT /automations/:id`                                   |
 | `steps`              | no       | Extra steps appended after predefined ones (for SLG/SE/RN); all steps for REENGAGEMENT |
@@ -681,14 +682,16 @@ Creates a new `REENGAGEMENT_CAMPAIGNS` automation with all steps and triggers pr
 ```json
 {
   "name": "My Win-back Campaign",
-  "description": "Re-engage contacts inactive for 30+ days"
+  "description": "Re-engage contacts inactive for 30+ days",
+  "campaignListId": 5
 }
 ```
 
-| Field         | Type   | Required | Notes                      |
-| ------------- | ------ | -------- | -------------------------- |
-| `name`        | string | **yes**  | Name of the new automation |
-| `description` | string | no       | Optional description       |
+| Field            | Type   | Required | Notes                                                                                                                     |
+| ---------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `name`           | string | **yes**  | Name of the new automation                                                                                                |
+| `description`    | string | no       | Optional description                                                                                                      |
+| `campaignListId` | number | no       | ID of the Campaign List that scopes this automation's contact pool. The trigger will only fire for contacts on this list. |
 
 **Response `201`** — full automation object (same shape as `GET /automations/:id`):
 
@@ -964,7 +967,13 @@ Each list in the response includes a `configuredInAutomations` array — the aut
 GET /campaign-lists/:id/members
 ```
 
-Returns all leads enrolled in the list, ordered by most recently enrolled first.
+Returns all leads enrolled in the list, ordered by most recently enrolled first. Each member includes a `leadSource` field indicating how they were enrolled.
+
+| `leadSource` | Meaning                                                   |
+| ------------ | --------------------------------------------------------- |
+| `AUTOMATION` | Enrolled automatically when captured by an SLG automation |
+| `MANUAL`     | Added directly by the user via the contact creation form  |
+| `IMPORT`     | Added via bulk upload _(future)_                          |
 
 ```json
 [
@@ -972,16 +981,75 @@ Returns all leads enrolled in the list, ordered by most recently enrolled first.
     "id": 7,
     "enrolledAt": "2026-02-27T10:00:00.000Z",
     "source": "automation",
+    "leadSource": "AUTOMATION",
     "lead": {
       "id": 101,
       "name": "Jane Doe",
       "email": "jane@example.com",
       "phone": "+1234567890",
+      "whatsappId": null,
+      "facebookMessengerId": null,
+      "linkedInId": null,
+      "telegramId": null,
       "source": "form",
       "createdAt": "2026-02-20T08:00:00.000Z"
     }
   }
 ]
+```
+
+### Manually add a contact to a list
+
+```
+POST /campaign-lists/:id/members
+```
+
+Creates a new contact (if one with this email doesn't already exist) and enrolls them in the list with `leadSource: MANUAL`.
+
+**Request body:**
+
+```json
+{
+  "firstName": "Jane",
+  "lastName": "Doe",
+  "email": "jane@example.com",
+  "phone": "+447911123456",
+  "whatsappId": "+447911123456",
+  "facebookMessengerId": "1234567890",
+  "linkedInId": "jane-doe-1a2b3c",
+  "telegramId": "@janedoe",
+  "tagIds": [3, 7],
+  "notes": "High-value lapsed customer from 2024"
+}
+```
+
+| Field                 | Required | Notes                                                                                             |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `firstName`           | **yes**  |                                                                                                   |
+| `email`               | **yes**  | If a contact with this email already exists in the account, they are enrolled without re-creation |
+| `lastName`            | no       |                                                                                                   |
+| `phone`               | no       | Include country code                                                                              |
+| `whatsappId`          | no       | Used for WhatsApp outreach steps                                                                  |
+| `facebookMessengerId` | no       | Used for Messenger outreach steps                                                                 |
+| `linkedInId`          | no       | Used for LinkedIn outreach steps                                                                  |
+| `telegramId`          | no       | Used for Telegram outreach steps                                                                  |
+| `tagIds`              | no       | Array of tag IDs to apply                                                                         |
+| `notes`               | no       | Free-text notes                                                                                   |
+
+**Response `201`** — the created `CampaignListMember` record including the `lead` object.
+
+### Remove a contact from a list
+
+```
+DELETE /campaign-lists/:id/members/:leadId
+```
+
+Removes the contact from the list only — the contact profile itself is not deleted.
+
+**Response `200`:**
+
+```json
+{ "message": "Contact removed from list" }
 ```
 
 ### Update / Delete
@@ -990,6 +1058,8 @@ Returns all leads enrolled in the list, ordered by most recently enrolled first.
 PATCH /campaign-lists/:id
 DELETE /campaign-lists/:id
 ```
+
+> **Note:** A list cannot be deleted while any automation is actively using it as its contact pool. The `DELETE` endpoint will return a `400 Bad Request` naming the automations that must be updated or deactivated first.
 
 ---
 
