@@ -1,3 +1,7 @@
+---
+sidebar_position: 6
+---
+
 # Campaign Lists & Contact Management — Feature Proposal
 
 ## Background: How the Four Automations Work Today
