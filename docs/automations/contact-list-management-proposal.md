@@ -59,18 +59,18 @@ We propose adding full manual contact management. A user should be able to creat
 
 Each manually created contact would carry the following information:
 
-| Field | Notes |
-|---|---|
-| First name | |
-| Last name | |
-| Email address | |
-| Phone number | Including country code |
-| WhatsApp ID | For WhatsApp outreach |
-| Facebook Messenger ID | For Messenger outreach |
-| LinkedIn ID | For LinkedIn outreach |
-| Telegram ID | For Telegram outreach |
-| Tags | Selected from the user's existing tag list |
-| Notes | Free-text field for context |
+| Field                 | Notes                                      |
+| --------------------- | ------------------------------------------ |
+| First name            |                                            |
+| Last name             |                                            |
+| Email address         |                                            |
+| Phone number          | Including country code                     |
+| WhatsApp ID           | For WhatsApp outreach                      |
+| Facebook Messenger ID | For Messenger outreach                     |
+| LinkedIn ID           | For LinkedIn outreach                      |
+| Telegram ID           | For Telegram outreach                      |
+| Tags                  | Selected from the user's existing tag list |
+| Notes                 | Free-text field for context                |
 
 These fields mirror the messaging channels the platform already supports (WhatsApp, Facebook Messenger, LinkedIn Messenger, Telegram, SMS, Email), so that when an automation sends a message to this contact, it knows which identifier to use for each channel.
 
@@ -80,11 +80,11 @@ These fields mirror the messaging channels the platform already supports (WhatsA
 
 Every contact on a Campaign List will carry a **source** field indicating how they got there:
 
-| Source | Meaning |
-|---|---|
+| Source         | Meaning                                                                      |
+| -------------- | ---------------------------------------------------------------------------- |
 | **Automation** | Enrolled automatically when captured by a Sales & Lead Generation automation |
-| **Manual** | Added directly by the user through the contact creation interface |
-| **Import** | Added via bulk upload *(planned for a future release)* |
+| **Manual**     | Added directly by the user through the contact creation interface            |
+| **Import**     | Added via bulk upload _(planned for a future release)_                       |
 
 This distinction matters for reporting. A user running a win-back campaign should be able to see at a glance how many contacts were automatically captured versus deliberately added. It also helps with data quality — automatically captured contacts have a known origin, while manually added ones rely on the user's own data.
 
@@ -106,24 +106,42 @@ Both paths produce the same outcome — a contact enrolled in a list with source
 
 ### 4. Reengagement Automation Is Scoped to a Campaign List
 
-With manual contact management in place, a Reengagement & Campaigns automation setup becomes clearly defined:
+With manual contact management in place, a Reengagement & Campaigns automation setup becomes clearly defined.
+
+**Step 1 — Prepare the contact pool**
 
 ```
 1. User selects or creates a Campaign List
          ↓
 2. User adds contacts to the list
-   (manually added, or already there from a Sales & Lead Generation automation)
+   (manually, or already there from a Sales & Lead Generation automation)
          ↓
-3. User applies a Reengagement template
-   → automation is created with steps and a trigger already pre-filled
+```
+
+**Step 2 — Create the automation**
+
+There are two equivalent ways to do this:
+
+```
+  Path A — Using a template (faster)        Path B — From scratch
+  ──────────────────────────────────        ──────────────────────────────────
+  User applies a Reengagement template      User creates a blank automation
+  → trigger and steps are pre-filled        → selects a trigger manually
+         ↓                                    (e.g. "Contact inactive for X days")
+  User reviews and adjusts steps            → adds and configures steps one by one
+  as needed                                 → reviews the full configuration
+```
+
+Both paths produce an identical result. The template is a convenience — it pre-fills a proven starting configuration — but the user is never required to use one.
+
+**Step 3 — Activate**
+
+```
+  User attaches the Campaign List to the automation
          ↓
-4. User attaches the Campaign List to this automation
+  User activates the automation
          ↓
-5. User reviews and adjusts the steps as needed
-         ↓
-6. User activates the automation
-         ↓
-7. The trigger fires only for contacts on the attached list
+  The trigger fires only for contacts on the attached list
 ```
 
 A "Contact inactive for 30 days" trigger is now unambiguous: it evaluates inactivity for contacts on the list called "High-value clients from 2025" — not every contact in the account. Different Reengagement automations can target different lists simultaneously without interfering with each other.
@@ -144,15 +162,15 @@ This creates a single, consistent model: **Campaign Lists are the one concept fo
 
 ## Summary of What Needs to Change
 
-| Area | What Changes |
-|---|---|
-| Contact profile | Add social channel identifiers: WhatsApp, Facebook Messenger, LinkedIn, Telegram |
-| Campaign List members | Record how a contact was enrolled — automation, manual, or import |
-| Contact creation | New contact form with an optional Campaign List selector |
-| Campaign List view | Add and remove contacts manually; search for existing contacts |
-| Reengagement automation setup | A Campaign List selector to define the contact pool before activation |
-| Automation list steps | Operate on user-created Campaign Lists instead of the current internal model |
-| Smart rule conditions | Support "Is this contact on Campaign List X?" as a condition |
+| Area                          | What Changes                                                                     |
+| ----------------------------- | -------------------------------------------------------------------------------- |
+| Contact profile               | Add social channel identifiers: WhatsApp, Facebook Messenger, LinkedIn, Telegram |
+| Campaign List members         | Record how a contact was enrolled — automation, manual, or import                |
+| Contact creation              | New contact form with an optional Campaign List selector                         |
+| Campaign List view            | Add and remove contacts manually; search for existing contacts                   |
+| Reengagement automation setup | A Campaign List selector to define the contact pool before activation            |
+| Automation list steps         | Operate on user-created Campaign Lists instead of the current internal model     |
+| Smart rule conditions         | Support "Is this contact on Campaign List X?" as a condition                     |
 
 ---
 
@@ -170,12 +188,12 @@ Once Campaign Lists become the unified contact pool concept across the platform:
 
 ## How This Relates to the Existing Automations
 
-| Automation | How it finds contacts | Changes with this proposal |
-|---|---|---|
-| Sales & Lead Generation | Campaign List — auto-populated when leads are captured | No change to how SLG works; manually added contacts on the same list are also eligible |
-| Support Escalation | Event-driven — any contact who triggers a configured FAQ | No change |
-| Retention & Nurture | Event-driven — any contact who receives a configured tag | No change |
-| Reengagement & Campaigns | Currently: all contacts in account (unscoped) | **Scoped to a selected Campaign List** |
+| Automation               | How it finds contacts                                    | Changes with this proposal                                                             |
+| ------------------------ | -------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Sales & Lead Generation  | Campaign List — auto-populated when leads are captured   | No change to how SLG works; manually added contacts on the same list are also eligible |
+| Support Escalation       | Event-driven — any contact who triggers a configured FAQ | No change                                                                              |
+| Retention & Nurture      | Event-driven — any contact who receives a configured tag | No change                                                                              |
+| Reengagement & Campaigns | Currently: all contacts in account (unscoped)            | **Scoped to a selected Campaign List**                                                 |
 
 ---
 
@@ -201,6 +219,7 @@ The same list creation flow available elsewhere on the platform works here. A us
 
 **View and edit contacts within a list**
 Clicking into a list opens its contact table. From here the user can:
+
 - View all enrolled contacts with their profile details and source (how they were added)
 - Add a new contact manually using the contact creation form
 - Search for an existing contact in their account and enroll them without re-entering details
