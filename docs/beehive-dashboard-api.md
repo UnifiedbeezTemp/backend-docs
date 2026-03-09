@@ -690,7 +690,9 @@ Custom attribute definitions for 4 entity groups. Pre-seeded defaults are create
 
 **Groups:** `CONTACT`, `CONVERSATION`, `GROUP` (team inbox group chats), `TEAM`
 
-**Data types:** `DATE`, `DATETIME`, `NUMBER`, `SINGLE_BUTTON`, `TEXT`, `SINGLE_SELECT`, `MULTI_SELECT`
+**Data types:** `DATE`, `DATETIME`, `NUMBER`, `TEXT`, `SINGLE_SELECT`, `MULTI_SELECT`
+
+> `options` (array of `{ value, label }`) is **required** when `dataType` is `SINGLE_SELECT` or `MULTI_SELECT`, and must contain at least one entry.
 
 ### GET `/attributes?group=CONTACT`
 
@@ -738,6 +740,7 @@ Create a custom attribute.
 
 **Errors**
 
+- `400` — `options` missing or empty for `SINGLE_SELECT` / `MULTI_SELECT`
 - `409` — Attribute with this key already exists in the group
 
 ---
@@ -986,3 +989,156 @@ Delete a contact and remove from all campaign lists.
 **Errors**
 
 - `404` — Contact not found
+
+---
+
+## Threads
+
+Threads allow focused discussion on a specific message (Slack-style). Replies live only in the thread panel — they are **not** shown in the main conversation timeline. The root message in the timeline shows a `threadSummary` badge with reply count and last active time.
+
+> Thread replies are scoped to the same conversation but excluded from `GET /messages?conversationId=...` results via an automatic `threadId: null` filter.
+
+---
+
+### POST `/messages/:messageId/thread`
+
+Start a thread from a message. Thread heading is auto-generated from the first 60 chars of the root message content.
+
+**Response**
+
+```json
+{
+  "id": "9007199254740994",
+  "conversationId": "9007199254740993",
+  "rootMessageId": "9007199254740990",
+  "heading": "Let's discuss the design proposal",
+  "messageCount": 0,
+  "lastMessageAt": null,
+  "createdAt": "2026-03-09T11:00:00.000Z",
+  "updatedAt": "2026-03-09T11:00:00.000Z"
+}
+```
+
+**Errors**
+
+- `404` — Message not found
+- `409` — Thread already exists for this message
+
+---
+
+### GET `/messages/:messageId/thread`
+
+Get the thread started from a specific message (includes first page of replies).
+
+**Errors**
+
+- `404` — No thread started from this message
+
+---
+
+### GET `/threads/:threadId?page=1&limit=20`
+
+Get a thread with paginated replies (oldest first).
+
+**Response**
+
+```json
+{
+  "id": "9007199254740994",
+  "heading": "Design proposal discussion",
+  "messageCount": 3,
+  "lastMessageAt": "2026-03-09T11:30:00.000Z",
+  "rootMessage": {
+    "id": "9007199254740990",
+    "content": "Let's discuss the design proposal",
+    "senderName": "Alice Johnson",
+    "direction": "OUTBOUND",
+    "createdAt": "2026-03-09T10:00:00.000Z"
+  },
+  "messages": [
+    /* thread replies */
+  ],
+  "total": 3,
+  "page": 1,
+  "limit": 20
+}
+```
+
+---
+
+### POST `/threads/:threadId/messages`
+
+Post a reply to a thread.
+
+**Request body**
+
+```json
+{ "content": "I think we should go with option B", "type": "TEXT" }
+```
+
+**Realtime:** Emits `thread:reply` to the conversation room:
+
+```json
+{
+  "threadId": "9007199254740994",
+  "rootMessageId": "9007199254740990",
+  "messageCount": 4,
+  "lastMessageAt": "2026-03-09T11:35:00.000Z",
+  "message": {
+    /* the new reply message */
+  }
+}
+```
+
+---
+
+### PUT `/threads/:threadId`
+
+Update the thread heading.
+
+**Request body**
+
+```json
+{ "heading": "Design proposal discussion" }
+```
+
+---
+
+### GET `/conversations/:conversationId/threads`
+
+List all threads in a conversation, ordered by most recently active.
+
+**Response**
+
+```json
+[
+  {
+    "id": "9007199254740994",
+    "rootMessageId": "9007199254740990",
+    "heading": "Design proposal discussion",
+    "messageCount": 3,
+    "lastMessageAt": "2026-03-09T11:30:00.000Z"
+  }
+]
+```
+
+---
+
+### `threadSummary` on Main Timeline Messages
+
+Every message returned by `GET /messages?conversationId=...` includes a `threadSummary` field:
+
+```json
+{
+  "id": "9007199254740990",
+  "content": "Let's discuss the design proposal",
+  "threadSummary": {
+    "threadId": "9007199254740994",
+    "heading": "Design proposal discussion",
+    "messageCount": 3,
+    "lastMessageAt": "2026-03-09T11:30:00.000Z"
+  }
+}
+```
+
+Messages without a thread have `"threadSummary": null`.
