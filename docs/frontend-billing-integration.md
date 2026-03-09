@@ -46,6 +46,27 @@ type BillingInterval = "MONTHLY" | "YEARLY";
 
 ---
 
+## Billing Details
+
+Both card collection flows require billing details to be passed alongside the card. These are stored directly on the Stripe PaymentMethod (card data never touches your backend) and synced to the Stripe Customer record by the backend after attach.
+
+### Fields
+
+| Field           | Stripe key                            | Notes                                                               |
+| --------------- | ------------------------------------- | ------------------------------------------------------------------- |
+| Cardholder name | `billing_details.name`                | Name as it appears on the card — may differ from the account holder |
+| Address line 1  | `billing_details.address.line1`       | Street address                                                      |
+| City            | `billing_details.address.city`        |                                                                     |
+| County / State  | `billing_details.address.state`       | "County" in IE/UK, "State" elsewhere                                |
+| Postal code     | `billing_details.address.postal_code` | Works for Eircodes, UK postcodes, EU postal codes                   |
+| Country         | `billing_details.address.country`     | ISO 3166-1 alpha-2 code (e.g. `"IE"`, `"GB"`, `"DE"`)               |
+
+All fields are required. The submit button should remain disabled until all billing fields and the card element are complete.
+
+> **Organisation accounts:** The person entering the card details may be a staff member rather than the account owner. Collect billing details from the form — do not pre-fill from the user profile.
+
+---
+
 ## Setup
 
 Install Stripe.js:
@@ -154,11 +175,23 @@ import {
 </Elements>;
 ```
 
-Inside the form, call `stripe.confirmCardSetup` when the user submits:
+Inside the form, collect billing details alongside the card and pass them when calling `stripe.confirmCardSetup`:
 
 ```ts
 const { error, setupIntent } = await stripe.confirmCardSetup(clientSecret, {
-  payment_method: { card: elements.getElement(CardElement) },
+  payment_method: {
+    card: elements.getElement(CardElement),
+    billing_details: {
+      name: cardholderName, // name as on the card
+      address: {
+        line1: addressLine1,
+        city: city,
+        state: state, // county in IE/UK, state elsewhere
+        postal_code: postalCode, // Eircode, UK postcode, EU postal code
+        country: country, // ISO 3166-1 alpha-2, e.g. "IE", "GB", "DE"
+      },
+    },
+  },
 });
 
 if (error) {
@@ -172,7 +205,7 @@ const paymentMethodId =
     : setupIntent.payment_method.id;
 ```
 
-> **Important:** `confirmCardSetup` contacts Stripe directly. No card data touches your backend.
+> **Important:** `confirmCardSetup` contacts Stripe directly. No card data or billing details touch your backend. The backend syncs billing details to the Stripe Customer record after the payment method is attached.
 
 ### Step 3 — Attach the payment method
 
@@ -222,11 +255,23 @@ POST /payment/create-setup-intent
 
 ### Step 2 — Collect the new card with Stripe Elements
 
-Same as trial setup — use `stripe.confirmCardSetup` with the new `client_secret`:
+Same as trial setup — collect billing details alongside the card and pass them to `stripe.confirmCardSetup`:
 
 ```ts
 const { error, setupIntent } = await stripe.confirmCardSetup(clientSecret, {
-  payment_method: { card: elements.getElement(CardElement) },
+  payment_method: {
+    card: elements.getElement(CardElement),
+    billing_details: {
+      name: cardholderName,
+      address: {
+        line1: addressLine1,
+        city: city,
+        state: state,
+        postal_code: postalCode,
+        country: country,         // ISO 3166-1 alpha-2
+      },
+    },
+  },
 });
 
 const paymentMethodId = /* extract from setupIntent as above */;
@@ -511,7 +556,7 @@ if (subscription.cancelAtPeriodEnd) {
 }
 ```
 
-### Cancel subscription
+### Cancel subscription (at period end)
 
 ```
 POST /payment/cancel-subscription
@@ -520,7 +565,22 @@ POST /payment/cancel-subscription
 → { "message": "Subscription cancelled successfully" }
 ```
 
-Cancellation takes effect at the end of the current billing period (`currentPeriodEnd`). The user retains access until then.
+Soft cancel — sets `cancelAtPeriodEnd: true`. The subscription remains active and the user retains access until `currentPeriodEnd`. Can be undone with `POST /payment/reactivate-subscription`.
+
+After soft-cancelling, `Switch plan / interval` remains available. However, **yearly → monthly switching is still blocked** until the yearly period expires. To switch from yearly to monthly, let the plan expire naturally (do not reactivate), then re-subscribe on a monthly plan.
+
+### Cancel subscription immediately
+
+```
+POST /payment/cancel-subscription-immediately
+(no body)
+
+→ { "message": "Subscription cancelled immediately" }
+```
+
+Hard cancel — terminates the subscription in Stripe immediately. The user loses access at once. **No refund is issued.** Use this only when the user explicitly chooses to forfeit their remaining access period.
+
+> Show a prominent warning before calling this endpoint: "You will lose access immediately. No refund will be issued."
 
 ### Reactivate subscription
 
@@ -689,11 +749,13 @@ User selects plan + billing interval
 POST /auth/setup/trial { planType, billingInterval }
         │ returns clientSecret
         ▼
-stripe.confirmCardSetup(clientSecret, { card })
+stripe.confirmCardSetup(clientSecret, { card, billing_details })
+        │ billing details stored on PaymentMethod in Stripe
         │ returns paymentMethodId
         ▼
 POST /auth/payment/attach { payment_method_id }
         │ attaches card + creates trial subscription
+        │ syncs billing_details to Stripe Customer record
         ▼
 Show success (trial active)
 
@@ -706,11 +768,13 @@ User clicks "Change card"
 POST /payment/create-setup-intent
         │ returns clientSecret
         ▼
-stripe.confirmCardSetup(clientSecret, { card })
+stripe.confirmCardSetup(clientSecret, { card, billing_details })
+        │ billing details stored on PaymentMethod in Stripe
         │ returns paymentMethodId
         ▼
 POST /payment/update-payment-method { payment_method_id }
         │ updates card + subscription default, no subscription changes
+        │ syncs billing_details to Stripe Customer record
         ▼
 Show updated card details
 
@@ -756,4 +820,4 @@ A working reference implementation of both flows is available at:
 docs/TrialSetup.tsx
 ```
 
-It handles loading state, error display, the plan selector, initial card collection, and the card update flow with cancel support.
+It handles loading state, error display, the plan selector, initial card collection (including billing address fields), and the card update flow with cancel support.
