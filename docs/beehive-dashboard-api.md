@@ -48,6 +48,8 @@ Transitions the account from Beehive → Live mode. Sends a confirmation email. 
 
 Brand Kit stores visual identity: logo, colours, fonts, social links. One brand kit per user/organisation.
 
+There is a **single logo field** — `companyLogoUrl`. It is set either by uploading a file (`POST /brand-kit/upload-logo`) or by auto-detection (`POST /brand-kit/detect`). A manually uploaded logo always takes precedence and will not be overwritten by detection.
+
 ### GET `/brand-kit`
 
 Returns the current brand kit (or `null` if not yet created).
@@ -60,7 +62,6 @@ Returns the current brand kit (or `null` if not yet created).
   "userId": 42,
   "websiteUrl": "https://acme.com",
   "companyLogoUrl": "https://cdn.unifiedbeez.com/brand-kits/logos/42/logo.png",
-  "detectedLogoUrl": "https://acme.com/og-image.png",
   "lightPrimary": "#1A56DB",
   "lightBackground": "#F9FAFB",
   "darkPrimary": "#3F83F8",
@@ -146,7 +147,7 @@ Remove the uploaded company logo (deletes from S3).
 
 ### POST `/brand-kit/detect`
 
-Auto-detect brand colours and logo from a website URL. Returns suggestions — user must accept and save via `PUT /brand-kit`.
+Auto-detect brand colours and logo from a website URL. Persists `websiteUrl` into the brand kit and pre-fills `companyLogoUrl` **only if the user has not already uploaded a logo**. Returns the detected values so the frontend can preview them.
 
 **Request body**
 
@@ -158,13 +159,14 @@ Auto-detect brand colours and logo from a website URL. Returns suggestions — u
 
 ```json
 {
-  "detectedLogoUrl": "https://acme.com/og-image.png",
+  "companyLogoUrl": "https://acme.com/og-image.png",
   "detectedPrimaryColor": "#1A56DB",
   "detectedFaviconUrl": "https://acme.com/favicon.ico"
 }
 ```
 
 > Fields will be `null` if they couldn't be detected from the page.
+> `companyLogoUrl` is only written to the brand kit if it is currently empty — an existing uploaded logo is never overwritten by detection.
 
 ---
 
@@ -1142,3 +1144,672 @@ Every message returned by `GET /messages?conversationId=...` includes a `threadS
 ```
 
 Messages without a thread have `"threadSummary": null`.
+
+---
+
+## CRM — Merge Fields
+
+Merge fields are personalization variables (e.g. `%EMAIL ADDRESS%`) inserted into email/message templates. They are organized into four fixed groups. Each group is seeded with defaults on first access; users can also create custom fields.
+
+**Groups:** `AUDIENCE`, `MESSAGE`, `SOCIAL`, `PROFILE`
+
+**Field types:** `TEXT`, `LINK`, `DATE`
+
+---
+
+### GET `/merge-fields?group=AUDIENCE`
+
+List all merge fields for a group. Automatically seeds defaults the first time a group is accessed.
+
+**Response**
+
+```json
+[
+  {
+    "id": 1,
+    "userId": 42,
+    "group": "AUDIENCE",
+    "fieldName": "Email Address",
+    "type": "TEXT",
+    "autoFillTag": "%EMAIL ADDRESS%",
+    "isDefault": true,
+    "position": 0,
+    "createdAt": "2026-03-10T09:00:00.000Z",
+    "updatedAt": "2026-03-10T09:00:00.000Z"
+  }
+]
+```
+
+**Default fields per group:**
+
+| Group    | Field Name                   | Type |
+| -------- | ---------------------------- | ---- |
+| AUDIENCE | Email Address                | TEXT |
+| AUDIENCE | Full Name                    | TEXT |
+| AUDIENCE | First Name                   | TEXT |
+| AUDIENCE | Last Name                    | TEXT |
+| AUDIENCE | Phone Number                 | TEXT |
+| AUDIENCE | GEO - Country                | TEXT |
+| AUDIENCE | GEO - Region                 | TEXT |
+| AUDIENCE | GEO - City                   | TEXT |
+| AUDIENCE | GEO - Area Code              | TEXT |
+| AUDIENCE | Date Subscribed              | DATE |
+| AUDIENCE | Time Subscribed              | TEXT |
+| AUDIENCE | Contact's IP Address         | TEXT |
+| AUDIENCE | Subscription List            | TEXT |
+| AUDIENCE | Subscriber ID                | TEXT |
+| AUDIENCE | Position/Role                | TEXT |
+| AUDIENCE | Contact's Preferred Language | TEXT |
+| MESSAGE  | Opt Out Link                 | LINK |
+| MESSAGE  | Full Sender Info             | TEXT |
+| MESSAGE  | Sender Details               | TEXT |
+| MESSAGE  | Compliance Reminder          | TEXT |
+| MESSAGE  | Web View                     | LINK |
+| MESSAGE  | Web View (No Social Links)   | LINK |
+| MESSAGE  | Manage Subscription Link     | LINK |
+| MESSAGE  | Share Email Link             | LINK |
+| MESSAGE  | Unsubscribe From All         | LINK |
+| MESSAGE  | Current Date                 | DATE |
+| SOCIAL   | Social Sharing Links         | LINK |
+| SOCIAL   | Facebook Like Button         | LINK |
+| SOCIAL   | Facebook Share Button        | LINK |
+| SOCIAL   | Facebook Share URL           | LINK |
+| SOCIAL   | Twitter/X Share Icon         | LINK |
+| SOCIAL   | Twitter/X Share Link         | LINK |
+| SOCIAL   | LinkedIn Share Icon          | LINK |
+| SOCIAL   | LinkedIn Share Link          | LINK |
+| SOCIAL   | Share On Reddit Icon         | LINK |
+| SOCIAL   | Reddit Share URL             | LINK |
+| SOCIAL   | Digg Share URL               | LINK |
+| SOCIAL   | Digg Share Icon              | LINK |
+| SOCIAL   | Delicious Share Icon         | LINK |
+| SOCIAL   | Delicious Share Link         | LINK |
+| SOCIAL   | StumbleUpon Share Icon       | LINK |
+| PROFILE  | Profile: Name                | TEXT |
+| PROFILE  | Profile: First Name          | TEXT |
+| PROFILE  | Profile: Last Name           | TEXT |
+| PROFILE  | Profile: Full Name           | TEXT |
+| PROFILE  | Profile: Email               | TEXT |
+| PROFILE  | Profile: URL                 | LINK |
+| PROFILE  | Profile: Created Date        | DATE |
+| PROFILE  | Profile: Last Updated Date   | DATE |
+| PROFILE  | Profile: Address             | TEXT |
+| PROFILE  | Profile: City                | TEXT |
+| PROFILE  | Profile: State/Province      | TEXT |
+| PROFILE  | Profile: Postal Code         | TEXT |
+| PROFILE  | Profile: Country             | TEXT |
+| PROFILE  | Profile: Phone Number        | TEXT |
+| PROFILE  | Profile: Description         | TEXT |
+| PROFILE  | Profile: Number of Employees | TEXT |
+| PROFILE  | Profile: Annual Revenue      | TEXT |
+| PROFILE  | Profile: Industry/Vertical   | TEXT |
+
+---
+
+### POST `/merge-fields`
+
+Create a custom merge field. The `autoFillTag` is auto-generated server-side from the field name (e.g. `"Customer Tier"` → `%CUSTOMER TIER%`).
+
+**Request body**
+
+```json
+{
+  "group": "AUDIENCE",
+  "fieldName": "Customer Tier",
+  "type": "TEXT"
+}
+```
+
+**Response** — the created merge field object including the generated `autoFillTag`.
+
+**Errors**
+
+- `409` — a field with the same auto-fill tag already exists in this group
+
+---
+
+### DELETE `/merge-fields/:id`
+
+Delete a custom merge field.
+
+**Errors**
+
+- `400` — cannot delete default merge fields
+- `404` — field not found
+
+---
+
+## Settings
+
+The Settings page is split into six tabs. All endpoints require `Authorization: Bearer <session_token>`.
+
+---
+
+### Profile Tab
+
+#### Personal Details
+
+**GET `/auth/profile`**
+Returns the current user's full profile (name, email, phone, business details, plan, etc.).
+
+---
+
+**PATCH `/auth/profile`**
+Update personal details.
+
+```json
+{
+  "fullName": "Jane Doe",
+  "email": "jane@example.com",
+  "phone": "+447911123456"
+}
+```
+
+All fields optional. Returns the updated `UserDto`.
+
+---
+
+**POST `/auth/profile/photo`**
+Upload a profile picture. Multipart form-data with a single `file` field.
+
+```json
+{ "photoUrl": "https://cdn.example.com/photos/abc.jpg" }
+```
+
+---
+
+**DELETE `/auth/profile/photo`**
+Remove the profile photo.
+
+---
+
+#### Business Details
+
+**PATCH `/auth/setup/profile`**
+Update business information. Multipart form-data.
+
+| Field                  | Type     | Description                   |
+| ---------------------- | -------- | ----------------------------- |
+| `firstName`            | string   |                               |
+| `lastName`             | string   |                               |
+| `phone`                | string   |                               |
+| `businessName`         | string   |                               |
+| `industry`             | enum     | See `GET /auth/industries`    |
+| `businessObjectiveIds` | number[] | JSON array or comma-separated |
+| `businessGoalIds`      | number[] | JSON array or comma-separated |
+| `businessOverview`     | string   | Max 2000 chars                |
+| `websites`             | string[] | Array of URLs                 |
+| `businessLogo`         | file     | Image upload                  |
+| `businessFiles`        | file[]   | Up to 10 files                |
+
+---
+
+**GET `/auth/industries`**
+Returns all industry options: `[{ "value": "ECOMMERCE_RETAIL", "label": "Ecommerce & Retail" }, ...]`
+
+**GET `/auth/business-objectives`**
+Returns available business objectives.
+
+**GET `/auth/business-goals`**
+Returns available business goals.
+
+**DELETE `/auth/business-files/:fileId`**
+Delete an uploaded business file.
+
+---
+
+#### Knowledge Files & Websites
+
+Managed under the AI assistant's knowledge base. Pass the relevant `aiId`:
+
+- `GET /ai/:aiId/knowledge/files` — list knowledge files
+- `POST /ai/:aiId/knowledge/files` — upload files (multipart)
+- `DELETE /ai/:aiId/knowledge/files/:fileId` — delete a file
+- `POST /ai/:aiId/knowledge/websites` — add a website source `{ "url": "https://..." }`
+- `DELETE /ai/:aiId/knowledge/websites/:websiteId` — remove a website
+
+#### AI Assistants
+
+- `GET /ai` — list all AI assistants
+- `POST /ai` — create an AI assistant
+- `PATCH /ai/:id` — update an AI assistant
+- `DELETE /ai/:id` — delete an AI assistant
+
+---
+
+### Preferences Tab
+
+**GET `/auth/preferences`**
+Returns current preferences. Defaults returned if not yet set.
+
+```json
+{
+  "theme": "auto",
+  "language": "en",
+  "autoSave": true
+}
+```
+
+---
+
+**PATCH `/auth/preferences`**
+Update any subset of preferences.
+
+```json
+{
+  "theme": "dark",
+  "language": "fr",
+  "autoSave": false
+}
+```
+
+| Field      | Type    | Values                        |
+| ---------- | ------- | ----------------------------- |
+| `theme`    | string  | `"light"`, `"dark"`, `"auto"` |
+| `language` | string  | e.g. `"en"`, `"fr"`           |
+| `autoSave` | boolean |                               |
+
+---
+
+### Notifications Tab
+
+**GET `/auth/notifications/preferences`**
+Returns all notification toggles. Defaults returned if not yet configured.
+
+```json
+{
+  "emails": true,
+  "pushNotifications": true,
+  "marketingEmails": false,
+  "securityAlerts": true,
+  "phoneNotifications": false
+}
+```
+
+---
+
+**PATCH `/auth/notifications/preferences`**
+Toggle any notification type. All fields optional (boolean).
+
+```json
+{
+  "marketingEmails": true,
+  "phoneNotifications": true
+}
+```
+
+---
+
+### Security Tab
+
+#### Password
+
+**PATCH `/auth/change-password`**
+
+```json
+{
+  "currentPassword": "OldPass123!",
+  "newPassword": "NewPass456!",
+  "confirmPassword": "NewPass456!"
+}
+```
+
+Invalidates **all** active sessions on success. User must log in again.
+
+---
+
+#### Two-Factor Authentication
+
+**POST `/auth/2fa/setup`**
+Generates a TOTP QR code and backup codes. Returns:
+
+```json
+{
+  "qrCode": "data:image/png;base64,...",
+  "secret": "BASE32SECRET",
+  "backupCodes": ["abc123", "def456", "..."]
+}
+```
+
+**POST `/auth/2fa/verify-setup`**
+Confirm TOTP and enable 2FA.
+
+```json
+{ "token": "123456", "backupCodes": ["abc123", "..."] }
+```
+
+**GET `/auth/2fa/status`**
+Returns current 2FA state: `{ "enabled": true, "method": "totp" }`.
+
+**POST `/auth/2fa/disable`**
+Disable 2FA (requires password confirmation).
+
+```json
+{ "password": "CurrentPass123!" }
+```
+
+**POST `/auth/2fa/regenerate-backup`**
+Generate a new set of backup recovery codes. Returns `{ "backupCodes": [...] }`.
+
+---
+
+#### Active Sessions
+
+**GET `/auth/sessions`**
+List all active sessions for the current user.
+
+```json
+[
+  {
+    "id": "cuid_abc123",
+    "deviceName": "Chrome on macOS",
+    "deviceType": "desktop",
+    "ipAddress": "203.0.113.5",
+    "location": "London, UK",
+    "loginMethod": "password",
+    "lastActiveAt": "2026-03-09T10:00:00.000Z",
+    "createdAt": "2026-03-01T08:00:00.000Z"
+  }
+]
+```
+
+---
+
+**DELETE `/auth/sessions/:sessionId`**
+Revoke a specific session (log out that device).
+
+```json
+{ "message": "Session revoked" }
+```
+
+---
+
+### Channels Tab
+
+**GET `/channels/available/all`**
+Returns all channels with access metadata — shows which are available on the current plan and which are blocked and why.
+
+**GET `/channels/selected`**
+Returns channels the user has connected.
+
+> For connecting, configuring, and disconnecting individual channels, refer to the **Channel Integration** documentation.
+
+---
+
+### Team Tab
+
+> Invite and role-management endpoints require `OWNER` or `ADMIN` role.
+
+**GET `/team/members`**
+List all team members with their roles, activity status, and last login.
+
+**GET `/team/invitations`**
+List pending (unexpired) invitations. _(OWNER/ADMIN only)_
+
+**POST `/team/assign-role`**
+Assign or change a team member's role. _(OWNER/ADMIN only)_
+
+```json
+{ "userId": 42, "roleId": 3 }
+```
+
+**DELETE `/team/members/:id`**
+Deactivate and remove a team member. _(OWNER/ADMIN only)_
+
+---
+
+### Plans & Billing Tab
+
+The Plans & Billing settings page is divided into four tabs.
+
+---
+
+#### Tab 1 — Your Plan
+
+Displays the user's active subscription plan and available addons. Uses existing plan and addon endpoints:
+
+- **GET `/plan`** — active plan details, features, limits
+- **GET `/plan/addons`** — available addons for purchase
+- **GET `/plan/addon-per-plan`** — addons available per plan tier
+- **POST `/plan/addons/purchase`** — purchase an addon
+- **POST `/plan/upgrade`** — upgrade/downgrade subscription
+
+See the **Plans** and **Addons** sections in this document for full details.
+
+---
+
+#### Tab 2 — Your Invoice
+
+Fetches invoice history directly from Stripe. No DB model; Stripe is the source of truth.
+
+**GET `/payment/invoices`**
+
+Returns all invoices for the authenticated user.
+
+```json
+{
+  "stats": {
+    "total": 12,
+    "nextInvoice": {
+      "date": "2026-04-01T00:00:00.000Z",
+      "estimatedAmount": 2900,
+      "currency": "gbp"
+    }
+  },
+  "invoices": [
+    {
+      "id": "in_abc123",
+      "number": "INV-0012",
+      "description": "Monthly subscription — March 2026",
+      "date": "2026-03-01T00:00:00.000Z",
+      "amount": 2900,
+      "currency": "gbp",
+      "status": "paid",
+      "hostedInvoiceUrl": "https://invoice.stripe.com/...",
+      "invoicePdf": "https://pay.stripe.com/invoice/..."
+    }
+  ]
+}
+```
+
+- `stats.nextInvoice` is `null` if the user has no active subscription.
+- `amount` is in the smallest currency unit (pence for GBP).
+- `status` values: `draft`, `open`, `paid`, `uncollectible`, `void`.
+
+---
+
+#### Tab 3 — Budget
+
+Monthly budget configuration with computed spending stats and per-pack allocations.
+
+**GET `/budget`**
+
+Returns the full budget dashboard for the current calendar month.
+
+```json
+{
+  "config": {
+    "monthlyLimit": 5000,
+    "allocations": {
+      "contactPack": 1000,
+      "emailPack": 1500,
+      "aiComputePack": 2000,
+      "twilioPack": 500
+    }
+  },
+  "stats": {
+    "budgetedAmount": 5000,
+    "totalSpent": 2200,
+    "percentageUsed": 44.0,
+    "amountRemaining": 2800,
+    "savedThisMonth": 800,
+    "percentageRemaining": 56.0,
+    "avgSpendingOverall": 220,
+    "avgSpendingPerWeek": 1540,
+    "avgSpendingPerDay": 220,
+    "projectedEndOfMonth": 6820,
+    "daysRemaining": 21,
+    "daysElapsed": 10,
+    "daysInMonth": 31
+  },
+  "budgetBreakdown": {
+    "contactPack": {
+      "allocated": 1000,
+      "spent": 500,
+      "unitsAcquired": 5000,
+      "unitsUsed": 3200,
+      "unitLabel": "contacts",
+      "percentageOfAllocationUsed": 50.0,
+      "pricePerUnit": 0.1
+    },
+    "emailPack": {
+      "allocated": 1500,
+      "spent": 1000,
+      "unitsAcquired": 10000,
+      "unitsUsed": 7500,
+      "unitLabel": "emails",
+      "percentageOfAllocationUsed": 66.67,
+      "pricePerUnit": 0.1
+    },
+    "aiComputePack": {
+      "allocated": 2000,
+      "spent": 700,
+      "unitsAcquired": 100000,
+      "unitsUsed": 65000,
+      "unitLabel": "tokens",
+      "percentageOfAllocationUsed": 35.0,
+      "pricePerUnit": 0.007
+    },
+    "twilioPack": {
+      "allocated": 500,
+      "spent": 0,
+      "unitsAcquired": 1000,
+      "unitsUsed": 0,
+      "unitLabel": "messages",
+      "percentageOfAllocationUsed": 0,
+      "pricePerUnit": 0
+    },
+    "addons": { "allocated": null, "spent": 0 }
+  }
+}
+```
+
+- All monetary values are in **cents** (e.g. `5000` = £50.00).
+- `totalSpent` = sum of `ContactPack`, `EmailPack`, `TokenComputePack`, and `UserAddon` purchases in the current calendar month.
+- `savedThisMonth` = `allocatedTotal - totalSpent` (floored at 0).
+- `unitsAcquired` = units from pack purchases this month; `unitsUsed` = from current billing cycle usage tables.
+- `pricePerUnit` = `spent / unitsAcquired` (4 decimal places; 0 if no units acquired).
+- `percentageOfAllocationUsed` = `spent / allocated × 100` (0 if no allocation set).
+- If `autoAdjustEnabled` and spending ≥ 90%, `monthlyLimit` is automatically incremented by 2000 (£20) and the updated value is returned.
+- `addons.allocated` is always `null`.
+
+**PATCH `/budget`**
+
+Set the monthly budget limit.
+
+```json
+{ "monthlyLimit": 5000 }
+```
+
+**PATCH `/budget/allocations`**
+
+Set per-pack budget allocations (all fields optional; existing allocations are merged).
+
+```json
+{
+  "contactPack": 1000,
+  "emailPack": 1500,
+  "aiComputePack": 2000,
+  "twilioPack": 500
+}
+```
+
+**GET `/budget/transactions?months=3`**
+
+Returns pack purchase history (manual + auto top-up) sorted newest first. `months` = lookback period (1–12, default 3).
+
+```json
+{
+  "transactions": [
+    {
+      "id": 7,
+      "type": "email_pack",
+      "label": "Email Pack",
+      "quantity": 10000,
+      "unit": "emails",
+      "priceEur": 1000,
+      "isAutoTopUp": true,
+      "purchasedAt": "2026-03-05T08:23:00.000Z"
+    },
+    {
+      "id": 3,
+      "type": "contact_pack",
+      "label": "Contact Pack",
+      "quantity": 5000,
+      "unit": "contacts",
+      "priceEur": 1000,
+      "isAutoTopUp": false,
+      "purchasedAt": "2026-03-01T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+`type` values: `contact_pack`, `email_pack`, `ai_compute_pack`, `twilio_pack`.
+
+**GET `/budget/settings`**
+
+Returns budget alert and auto-adjust toggle state.
+
+```json
+{ "alertEnabled": false, "autoAdjustEnabled": false }
+```
+
+**PATCH `/budget/settings`**
+
+Toggle budget alert and/or auto-adjust (all fields optional).
+
+```json
+{ "alertEnabled": true, "autoAdjustEnabled": false }
+```
+
+- **`alertEnabled`**: sends a budget alert email when monthly spending reaches 80% of `monthlyLimit`; debounced to once per calendar month.
+- **`autoAdjustEnabled`**: silently increases `monthlyLimit` by £20 (2000 cents) when spending reaches 90%; triggers on `GET /budget`.
+
+---
+
+#### Tab 4 — Auto Top-Up
+
+Auto top-up automatically purchases additional capacity when a usage limit is reached. Each pack type has an independent toggle.
+
+| Pack             | Endpoint                           | Trigger                                   |
+| ---------------- | ---------------------------------- | ----------------------------------------- |
+| Email packs      | `POST /usage/emails/auto-topup`    | When monthly email sends are exhausted    |
+| AI compute packs | `POST /usage/ai-tokens/auto-topup` | When token quota is exhausted             |
+| Contact packs    | `POST /usage/contacts/auto-topup`  | When contact limit is exceeded            |
+| Twilio SMS packs | `POST /usage/twilio/auto-topup`    | When purchased SMS messages are exhausted |
+
+**Request body (all four endpoints):**
+
+```json
+{ "enabled": true }
+```
+
+**Response:**
+
+```json
+{ "success": true, "message": "Auto top-up enabled" }
+```
+
+**Auto top-up behaviour:**
+
+- **Email packs**: purchases the smallest pack needed to cover the shortage (10k emails / £10 minimum).
+- **AI compute packs**: purchases the configured pack for the assistant.
+- **Contact packs**: purchases 5,000 contacts (£10) when the hard limit is exceeded.
+- **Twilio SMS packs**: adds 1,000 messages to the current billing cycle when exhausted.
+
+The `autoTopUpEnabled` flag is included in the stats response for each pack:
+
+- `GET /usage/emails` → `autoTopUpEnabled`
+- `GET /usage/twilio` → `autoTopUpEnabled`
+- `GET /usage/contacts` → (returned as part of contact limits; toggle via endpoint above)
