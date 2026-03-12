@@ -24,9 +24,50 @@ Returns the current mode for the authenticated user.
 
 ---
 
+### GET `/beehive/go-live/summary`
+
+Returns counts of existing Beehive-mode data per category. Call this before showing the go-live confirmation screen so the user can see what they have and choose what to keep.
+
+**Response**
+
+```json
+{
+  "brandKit": { "exists": true },
+  "automations": { "count": 3 },
+  "campaignLists": { "count": 2, "contactCount": 150 },
+  "templates": { "count": 8 }
+}
+```
+
+**Errors**
+
+- `400` — Account is already live
+
+---
+
 ### POST `/beehive/go-live`
 
 Transitions the account from Beehive → Live mode. Sends a confirmation email. The `isBeehive` field in the auth user object will flip to `false`.
+
+Each `transfer*` flag controls whether the corresponding staged data is **kept** (`true`, default) or **permanently deleted** (`false`) as part of the transition. Omitting the body or a flag defaults to `true` (keep everything), preserving backwards compatibility.
+
+**Request body** (all fields optional, default `true`)
+
+```json
+{
+  "transferBrandKit": true,
+  "transferAutomations": true,
+  "transferCampaignLists": true,
+  "transferTemplates": true
+}
+```
+
+| Field                   | Default | Effect when `false`                                        |
+| ----------------------- | ------- | ---------------------------------------------------------- |
+| `transferBrandKit`      | `true`  | Deletes the Brand Kit record                               |
+| `transferAutomations`   | `true`  | Deletes all Automations                                    |
+| `transferCampaignLists` | `true`  | Deletes all Campaign Lists (cascades members) and Contacts |
+| `transferTemplates`     | `true`  | Deletes all Message Templates                              |
 
 **Response**
 
