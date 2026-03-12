@@ -491,10 +491,11 @@ const maxQuantity = addon.remainingPurchasable;
 
 **On plan upgrade/downgrade:**
 
-- Addons transfer if within new limits
-- Excess addons get refunded
-- Language preferences may be truncated
-- Refetch `/addon/purchased` after plan change
+- **Transfers**: Quantifiable addons (Seats, AI, WhatsApp) transfer if they fit the new plan's **addon-only capacity** (`Total Limit - Base Allowance`).
+- **Refunds**: Excess quantities are automatically cancelled and issued a prorated refund to the user's primary card.
+- **Conversion**: Features that were included in the previous plan but are paid addons in the new plan are converted to paid records.
+- **Persistence**: Usage packs (Contacts, Emails, AI Tokens) always transfer in full and are never refunded or capped.
+- **Refetch**: Call `/addon/purchased` and `/addon/available` after every plan change to refresh limits and UI states.
 
 **On billing interval change (monthly → yearly):**
 

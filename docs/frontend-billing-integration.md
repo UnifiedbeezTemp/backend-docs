@@ -357,12 +357,35 @@ Use this flow when a user upgrades or downgrades to a different plan while keepi
 
 This is also the flow for switching plan **and** interval at the same time (e.g. Business Monthly → Premium Yearly) — the "scheduled at period end" path only applies when switching interval on the **same** plan.
 
-### Behaviour
+### Addon Transfer & Refund Logic
 
-| User state        | Result                                                                                                                  |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **Trial**         | Immediate — current trial sub cancelled, new trial sub created, remaining trial days preserved                          |
-| **Active (paid)** | Immediate — prorated charge/refund issued, current sub cancelled, new sub created with next billing anchor carried over |
+When a plan switch occurs, the backend automatically reconciles existing addons to match the limits of the new plan.
+
+#### 1. Quantifiable Addons (Capped by Addon-Only capacity)
+
+For addons like **Extra Seats**, **Extra AI Assistants**, and **Extra WhatsApp Channels**, the transfer limit is calculated as the new plan's **total capacity minus its base allowance**.
+
+- **Example**: Switching from **Organisation** to **Business**
+  - **Current (Organisation)**: 5 base WhatsApp + 5 purchased addons = 10 total.
+  - **Target (Business)**: 1 base WhatsApp + 1 max addon = 2 total.
+  - **Result**: Only **1** purchased addon is transferred. The other 4 are refunded.
+
+Any quantity exceeding the new plan's addon limit is automatically cancelled, and a **prorated refund** is issued to the user's last payment method.
+
+#### 2. Usage Packs (Always Transferred)
+
+Addons in the `USAGE_PACK` category (e.g., **Contact Packs**, **Email Packs**, **AI Compute Packs**) are **always transferred in full**. They do not expire or get refunded during plan changes.
+
+#### 3. Feature Addons (Included vs Paid)
+
+- **Becomes Included**: If a paid addon (e.g., CRM Sync) is included for free in the target plan, the existing addon is marked for refund.
+- **No Longer Included**: If a feature was free (included) in the old plan but is a paid addon in the new plan, it is **converted to a paid addon** record (at which point standard limits apply).
+
+#### 4. Specialized Addons
+
+- **Multi-Language AI**: If the new plan has a lower limit for languages than currently active, the list is truncated starting from the most recently added languages.
+
+---
 
 ### Step 1 — Preview the impact (recommended)
 
