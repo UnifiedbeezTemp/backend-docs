@@ -5,7 +5,7 @@
 <meta name="generator" content="Docusaurus v3.9.2">
 <title data-rh="true">Addon System - Frontend Integration Guide | UnifiedBeez documentation</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:image" content="https://unifiedbeeztemp.github.io/backend-docs/img/docusaurus-social-card.jpg"><meta data-rh="true" name="twitter:image" content="https://unifiedbeeztemp.github.io/backend-docs/img/docusaurus-social-card.jpg"><meta data-rh="true" property="og:url" content="https://unifiedbeeztemp.github.io/backend-docs/docs/addon-integration"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Addon System - Frontend Integration Guide | UnifiedBeez documentation"><meta data-rh="true" name="description" content="Core Concepts"><meta data-rh="true" property="og:description" content="Core Concepts"><link data-rh="true" rel="icon" href="/backend-docs/img/favicon.ico"><link data-rh="true" rel="canonical" href="https://unifiedbeeztemp.github.io/backend-docs/docs/addon-integration"><link data-rh="true" rel="alternate" href="https://unifiedbeeztemp.github.io/backend-docs/docs/addon-integration" hreflang="en"><link data-rh="true" rel="alternate" href="https://unifiedbeeztemp.github.io/backend-docs/docs/addon-integration" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Addon System - Frontend Integration Guide","item":"https://unifiedbeeztemp.github.io/backend-docs/docs/addon-integration"}]}</script><link rel="alternate" type="application/rss+xml" href="/backend-docs/blog/rss.xml" title="UnifiedBeez documentation RSS Feed">
 <link rel="alternate" type="application/atom+xml" href="/backend-docs/blog/atom.xml" title="UnifiedBeez documentation Atom Feed"><link rel="stylesheet" href="/backend-docs/assets/css/styles.c51ffe61.css">
-<script src="/backend-docs/assets/js/runtime~main.d6af5e62.js" defer="defer"></script>
+<script src="/backend-docs/assets/js/runtime~main.cc71f956.js" defer="defer"></script>
 <script src="/backend-docs/assets/js/main.47e953eb.js" defer="defer"></script>
 </head>
 <body class="navigation-with-keyboard">
@@ -30,6 +30,11 @@
 <li class=""><code>active</code>: Currently usable</li>
 <li class=""><code>scheduledForCancellation</code>: Active until <code>expiresAt</code>, then deactivates</li>
 <li class="">Plan limits apply to <code>active</code> count only</li>
+</ul>
+<p><strong>Limits (<code>maxQuantity</code> vs <code>maxAllowed</code>):</strong></p>
+<ul>
+<li class=""><strong><code>maxQuantity</code></strong>: A static property of the addon definition itself. It determines if an addon can be bought multiple times (<code>null</code>) or if it&#x27;s a one-off feature (<code>1</code>). For instance, <code>EXTRA_SEAT</code> has <code>maxQuantity: null</code> (you can buy many), while <code>PRIORITY_SUPPORT</code> has <code>maxQuantity: 1</code> (you only buy it once).</li>
+<li class=""><strong><code>maxAllowed</code></strong>: A dynamic limit tied to the user&#x27;s specific subscription plan (<code>PlanType</code>), retrieved from their plan&#x27;s features. It determines the maximum total amount they can hold. For example, a &quot;Starter&quot; plan might have <code>maxAllowed: 5</code> for extra seats. <code>maxAllowed</code> is what physically prevents the purchase when checking limits, while <code>maxQuantity</code> simply defines if the addon is stackable.</li>
 </ul>
 <p><strong>Billing Type vs Billing Interval:</strong></p>
 <p>These are two distinct fields returned on purchased addons:</p>
@@ -90,12 +95,21 @@
 <h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="response-fields">Response Fields<a href="#response-fields" class="hash-link" aria-label="Direct link to Response Fields" title="Direct link to Response Fields" translate="no">​</a></h2>
 <p><strong><code>GET /addon/available</code> (available addons):</strong></p>
 <ul>
-<li class=""><code>billingInterval</code> — top-level, user&#x27;s current plan billing interval</li>
-<li class=""><code>category</code> — <code>&quot;USAGE_PACK&quot;</code> or <code>&quot;FEATURE&quot;</code> (see Addon Categories above)</li>
-<li class=""><code>priceEur</code> — monthly base price in pence, always present</li>
-<li class=""><code>yearlyPriceEur</code> — <code>priceEur × 12</code>, always present</li>
-<li class=""><code>effectivePriceEur</code> — actual charge amount based on billing interval; use this for the primary price display</li>
-<li class=""><code>currentQuantity</code>, <code>basePlanAllowance</code>, <code>maxAllowed</code>, <code>remainingPurchasable</code>, <code>isIncludedInPlan</code></li>
+<li class=""><code>id</code> — integer: The unique identifier of the addon definition.</li>
+<li class=""><code>type</code> — string (<code>AddonType</code>): The system identifier for the addon (e.g., <code>EXTRA_SEAT</code>, <code>CRM_CALENDAR_SYNC</code>).</li>
+<li class=""><code>category</code> — string: <code>&quot;USAGE_PACK&quot;</code> or <code>&quot;FEATURE&quot;</code> (see Addon Categories above).</li>
+<li class=""><code>name</code> — string: The human-readable display name of the addon.</li>
+<li class=""><code>priceEur</code> — number: The monthly base price in pence. Always present.</li>
+<li class=""><code>yearlyPriceEur</code> — number: Equivalent yearly price (<code>priceEur × 12</code>). Always present.</li>
+<li class=""><code>effectivePriceEur</code> — number: The actual charge amount based on billing interval. Use this for primary price display.</li>
+<li class=""><code>billingType</code> — string (<code>AddonBillingType</code>): The pricing model, either <code>&quot;RECURRING&quot;</code> (subscription) or <code>&quot;PER_USAGE&quot;</code> (one-time).</li>
+<li class=""><code>billingInterval</code> — string (<code>BillingInterval</code>): Top-level field indicating the user&#x27;s current plan billing interval (<code>&quot;MONTHLY&quot;</code> or <code>&quot;YEARLY&quot;</code>).</li>
+<li class=""><code>maxQuantity</code> — number | null: Determines if the addon is stackable. If <code>null</code>, multiple can be purchased. If <code>1</code>, it is a binary feature.</li>
+<li class=""><code>currentQuantity</code> — number: The number of this addon the user currently has active.</li>
+<li class=""><code>basePlanAllowance</code> — number: The quantity of this feature already included for free in the user&#x27;s base plan.</li>
+<li class=""><code>maxAllowed</code> — number | null: The maximum number of this addon the user is allowed to hold under their current plan. <code>null</code> means unlimited.</li>
+<li class=""><code>remainingPurchasable</code> — number | null: The quantity calculated as <code>maxAllowed</code> - (<code>basePlanAllowance</code> + <code>currentQuantity</code>).</li>
+<li class=""><code>isIncludedInPlan</code> — boolean: True if the feature is already fully covered by the base plan.</li>
 </ul>
 <p><strong><code>GET /addon/purchased</code> (purchased addons):</strong></p>
 <ul>
