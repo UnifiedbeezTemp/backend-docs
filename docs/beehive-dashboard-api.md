@@ -1813,3 +1813,604 @@ The `autoTopUpEnabled` flag is included in the stats response for each pack:
 - `GET /usage/emails` → `autoTopUpEnabled`
 - `GET /usage/twilio` → `autoTopUpEnabled`
 - `GET /usage/contacts` → (returned as part of contact limits; toggle via endpoint above)
+
+---
+
+#### Tab 5 — Credits
+
+Credits are unit-based prepaid balances that cover usage overflows (AI tokens, email, SMS, automation runs) once plan allowances and add-ons are exhausted. All endpoints require `Authorization: Bearer <session_token>`.
+
+> If a user has never interacted with credits before, the wallet is created automatically on first access — no prior setup required.
+
+---
+
+**GET `/credits`**
+
+Returns wallet stats for the current user.
+
+```json
+{
+  "balance": 3400,
+  "totalPurchased": 5000,
+  "creditsUsed": 1600,
+  "percentageUsed": 32
+}
+```
+
+- `balance` — credits currently remaining in the wallet.
+- `totalPurchased` — lifetime credits ever purchased.
+- `creditsUsed` — `totalPurchased - balance`.
+- `percentageUsed` — `0–100`, floored.
+
+---
+
+**GET `/credits/packages`**
+
+Returns the list of available credit packages for the buy modal, ordered by price.
+
+```json
+[
+  { "id": 1, "name": "Starter Pack", "credits": 500, "priceGbp": 500 },
+  { "id": 2, "name": "Basic Pack", "credits": 1000, "priceGbp": 900 },
+  { "id": 3, "name": "Growth Pack", "credits": 2500, "priceGbp": 2000 },
+  { "id": 4, "name": "Pro Pack", "credits": 5000, "priceGbp": 3500 },
+  { "id": 5, "name": "Business Pack", "credits": 10000, "priceGbp": 6000 },
+  { "id": 6, "name": "Enterprise Pack", "credits": 25000, "priceGbp": 12500 }
+]
+```
+
+- `priceGbp` is in **pence** (e.g. `500` = £5.00).
+- Only packages where `isActive = true` are returned.
+
+---
+
+**POST `/credits/purchase`**
+
+Purchases a credit package using the user's stored Stripe payment method.
+
+**Request body**
+
+```json
+{ "packageId": 3 }
+```
+
+**Response**
+
+```json
+{
+  "success": true,
+  "creditsAdded": 2500,
+  "newBalance": 5900,
+  "transactionId": 42,
+  "package": {
+    "id": 3,
+    "name": "Growth Pack",
+    "credits": 2500,
+    "priceGbp": 2000
+  }
+}
+```
+
+**Errors**
+
+- `400` — No payment method on file, payment failed, or package not active.
+- `404` — Package not found.
+
+> The charge is a one-time Stripe PaymentIntent against the customer's default payment method. Credits are only added to the wallet after a `succeeded` status is confirmed — the wallet is never credited on a failed or pending payment.
+
+---
+
+**GET `/credits/chart/monthly?months=6`**
+
+Returns credit deductions grouped by calendar month.
+
+| Query param | Default | Max  |
+| ----------- | ------- | ---- |
+| `months`    | `6`     | `12` |
+
+**Response**
+
+```json
+{
+  "data": [
+    { "month": "2025-10", "creditsUsed": 0 },
+    { "month": "2025-11", "creditsUsed": 120 },
+    { "month": "2025-12", "creditsUsed": 340 },
+    { "month": "2026-01", "creditsUsed": 200 },
+    { "month": "2026-02", "creditsUsed": 510 },
+    { "month": "2026-03", "creditsUsed": 430 }
+  ]
+}
+```
+
+- All months in the range are returned, including zero-usage months.
+- `month` format: `YYYY-MM`.
+
+---
+
+**GET `/credits/chart/daily?days=30`**
+
+Returns credit deductions grouped by day.
+
+| Query param | Default | Max  |
+| ----------- | ------- | ---- |
+| `days`      | `30`    | `90` |
+
+**Response**
+
+```json
+{
+  "data": [
+    { "date": "2026-03-01", "creditsUsed": 0 },
+    { "date": "2026-03-02", "creditsUsed": 45 },
+    { "date": "2026-03-03", "creditsUsed": 12 },
+    "..."
+  ]
+}
+```
+
+- All days in the range are returned, including zero-usage days.
+- `date` format: `YYYY-MM-DD`.
+
+---
+
+**GET `/credits/breakdown`**
+
+Returns all-time credit consumption grouped by the service type that consumed it.
+
+```json
+{
+  "breakdown": [
+    { "usageType": "AI_TOKEN_OVERAGE", "credits": 1200 },
+    { "usageType": "EMAIL_OVERAGE", "credits": 300 },
+    { "usageType": "SMS_OVERAGE", "credits": 100 }
+  ]
+}
+```
+
+`usageType` values: `AI_TOKEN_OVERAGE`, `EMAIL_OVERAGE`, `SMS_OVERAGE`, `AUTOMATION_OVERAGE`, `MANUAL_ADJUSTMENT`.
+
+> `breakdown` is empty `[]` if no deductions have occurred yet.
+
+---
+
+**GET `/credits/transactions?page=1&limit=20`**
+
+Paginated ledger of all credit transactions, newest first.
+
+```json
+{
+  "transactions": [
+    {
+      "id": 42,
+      "type": "PURCHASE",
+      "amount": 2500,
+      "balanceAfter": 5900,
+      "usageType": null,
+      "description": "Purchased Growth Pack: +2500 credits",
+      "stripePaymentIntentId": "pi_abc123",
+      "createdAt": "2026-03-11T12:00:00.000Z",
+      "package": {
+        "id": 3,
+        "name": "Growth Pack",
+        "credits": 2500,
+        "priceGbp": 2000
+      }
+    },
+    {
+      "id": 41,
+      "type": "DEDUCTION",
+      "amount": -45,
+      "balanceAfter": 3400,
+      "usageType": "AI_TOKEN_OVERAGE",
+      "description": null,
+      "stripePaymentIntentId": null,
+      "createdAt": "2026-03-10T09:15:00.000Z",
+      "package": null
+    }
+  ],
+  "total": 12,
+  "page": 1,
+  "limit": 20
+}
+```
+
+- `type` values: `PURCHASE`, `DEDUCTION`, `REFUND`, `ADJUSTMENT`.
+- `amount` is positive for credits added, negative for credits removed.
+- `package` is only populated for `PURCHASE` transactions.
+- `usageType` is only populated for `DEDUCTION` transactions.
+- `limit` max is `100`.
+
+---
+
+**GET `/credits/transactions/:id/receipt`**
+
+Returns the official Stripe hosted receipt URL for a credit purchase transaction. Ideal for a "Download Receipt" button after a successful purchase or in a billing history view.
+
+**Response:**
+
+```json
+{
+  "receiptUrl": "https://pay.stripe.com/receipts/payment/..."
+}
+```
+
+- Returns `404 Not Found` if the transaction does not exist or has no associated Stripe record.
+- Returns `400 Bad Request` if the transaction is not a `PURCHASE` (e.g., trying to get a receipt for a deduction).
+
+---
+
+**Automatic Credit Deduction (Overage Enforcement)**
+
+Credits are silently deducted by the backend whenever a user exceeds their plan + add-on limits and auto top-up is disabled. No extra API call is required by the frontend — the deduction happens inside the existing enforcement methods (`canUseTokens`, `canSendEmail`, `canSendSMS`).
+
+**3-Layer Enforcement Flow**
+
+```
+Usage request (AI token / email / SMS)
+    │
+    ├── Within plan + add-on limit?  ──► Allow (no credits involved)
+    │
+    ├── autoTopUpEnabled = true?  ──► Purchase add-on pack ──► Allow
+    │
+    ├── Credits available?  ──► Deduct credits ──► Top up limit ──► Allow
+    │
+    └── No credits  ──►  400 with reason message
+```
+
+**Credit pricing rates**
+
+| Service          | Rate                               |
+| ---------------- | ---------------------------------- |
+| AI token overage | 1 credit per 10,000 overage tokens |
+| Email overage    | 1 credit per 100 overage emails    |
+| SMS overage      | 1 credit per message               |
+
+**AI tokens in detail:**
+When `tokensConsumed + estimatedTokens > baseTokens + purchasedTokens` and auto top-up is off, the backend calculates `creditsNeeded = ceil(overage / 10,000)`, deducts that many credits, and adds the equivalent tokens to `purchasedTokens`. The original `consumeTokens` call then proceeds normally.
+
+**Email in detail:**
+When `emailsSent >= baseLimit + purchasedLimit` and auto top-up is off, 1 credit is deducted and 100 emails are added to `purchasedLimit`. This means a single credit deduction covers the next 100 overage sends.
+
+**SMS in detail:**
+When `messagesUsed >= purchasedMessages` and auto top-up is off, 1 credit is deducted and 1 message is added to `purchasedMessages` for each individual SMS.
+
+**What the UI sees when credits are deducted:**
+The API calls that trigger enforcement (`POST /messages`, AI inference endpoints, etc.) return normally — the deduction is transparent. The credits balance visible on `GET /credits` will decrease, and the transaction will appear in `GET /credits/transactions` with:
+
+```json
+{
+  "type": "DEDUCTION",
+  "usageType": "AI_TOKEN_OVERAGE", // or EMAIL_OVERAGE, SMS_OVERAGE
+  "amount": -3, // negative = credits removed
+  "balanceAfter": 997
+}
+```
+
+**What the UI sees when credits run out:**
+The upstream endpoint (e.g. `POST /conversations`) returns a `400 Bad Request` with a reason describing the limit and suggesting remedies:
+
+```json
+{
+  "statusCode": 400,
+  "message": "Token limit exceeded. Current: 250000, Limit: 250000. Purchase credits or compute packs, or enable auto top-up."
+}
+```
+
+The Credits tab can use this to prompt the user to top up their wallet.
+
+---
+
+## Settings — Plans & Billing — Usage Tab
+
+All endpoints require `Authorization: Bearer <session_token>`. All usage stats are scoped to the authenticated user (or organisation owner for seat/member counts).
+
+---
+
+#### Individual Service Stats
+
+**GET `/usage/emails`**
+
+Returns email usage for the current billing cycle.
+
+```json
+{
+  "sent": 1240,
+  "baseLimit": 5000,
+  "purchasedLimit": 2000,
+  "totalLimit": 7000,
+  "remaining": 5760,
+  "percentageUsed": 18,
+  "avgPerDay": 113,
+  "estimatedDaysLeft": 51,
+  "autoTopUpEnabled": false,
+  "warningEmailSent": false,
+  "billingCycleStart": "2026-03-01T00:00:00.000Z",
+  "billingCycleEnd": "2026-03-31T23:59:59.000Z",
+  "nearLimit": false
+}
+```
+
+- `avgPerDay` — rolling average emails/day since cycle start.
+- `estimatedDaysLeft` — days until limit exhausted at current rate. `null` if no usage yet.
+
+---
+
+**GET `/usage/ai-tokens`**
+
+Returns token usage across all AI assistants for the current user.
+
+```json
+[
+  {
+    "assistantId": 1,
+    "assistantName": "Support Bot",
+    "stats": {
+      "consumed": 45000,
+      "inputTokens": 20000,
+      "outputTokens": 25000,
+      "baseTokens": 250000,
+      "purchasedTokens": 0,
+      "totalLimit": 250000,
+      "remaining": 205000,
+      "percentageUsed": 18,
+      "avgPerDay": 4090,
+      "estimatedDaysLeft": 50,
+      "autoTopUpEnabled": false,
+      "billingCycleStart": "2026-03-01T00:00:00.000Z",
+      "billingCycleEnd": "2026-03-31T23:59:59.000Z",
+      "nearLimit": false
+    }
+  }
+]
+```
+
+**GET `/usage/ai-tokens/:assistantId`** — same shape for a single assistant.
+
+---
+
+**GET `/usage/twilio`**
+
+Returns Twilio SMS usage for the current billing cycle.
+
+```json
+{
+  "used": 210,
+  "purchased": 500,
+  "remaining": 290,
+  "percentageUsed": 42,
+  "avgPerDay": 19,
+  "estimatedDaysLeft": 15,
+  "canSendSMS": true,
+  "autoTopUpEnabled": false,
+  "billingCycleStart": "2026-03-01T00:00:00.000Z",
+  "billingCycleEnd": "2026-03-31T23:59:59.000Z"
+}
+```
+
+---
+
+**GET `/usage/contacts`**
+
+Returns CRM contact usage. Contacts do **not** reset monthly — `estimatedDaysToLimit` is how long until the contact limit is reached at the current growth rate.
+
+```json
+{
+  "current": 1420,
+  "baseLimit": 5000,
+  "purchasedLimit": 0,
+  "totalLimit": 5000,
+  "bufferLimit": 5250,
+  "remaining": 3580,
+  "percentageUsed": 28,
+  "avgPerDay": 8,
+  "estimatedDaysToLimit": 447,
+  "inBuffer": false,
+  "nearLimit": false,
+  "canImport": true
+}
+```
+
+- `bufferLimit` — 5% over `totalLimit`, importing is allowed up to this point.
+- `estimatedDaysToLimit` — `null` if contact count is not growing.
+
+---
+
+**GET `/usage/seats`**
+
+Returns team seat stats using active organisation members as the source of truth.
+
+```json
+{
+  "used": 4,
+  "basePlanSeats": 5,
+  "extraSeats": 0,
+  "bulkSeats": 0,
+  "totalSeats": 5,
+  "remaining": 1,
+  "percentageUsed": 80,
+  "unlimited": false,
+  "canAddMembers": true
+}
+```
+
+- `used` = active invited members + owner (1).
+- `unlimited: true` = ORGANISATION plan with no `maxSeats` set (no percentage/remaining).
+- `bulkSeats` is only populated for ORGANISATION plan users.
+
+---
+
+#### Aggregated Endpoints
+
+**GET `/usage/overview`**
+
+Returns all service stats in a single call (email, AI tokens, SMS, contacts, seats).
+
+```json
+{
+  "contacts": { ... },
+  "emails": { ... },
+  "aiTokens": [ ... ],
+  "sms": { ... },
+  "seats": { ... }
+}
+```
+
+---
+
+**GET `/usage/summary`**
+
+Returns the on-track verdict, month progress, and per-service status flags. Designed for the Usage tab summary card.
+
+```json
+{
+  "billingCycleEnd": "2026-03-31T23:59:59.000Z",
+  "daysRemainingInCycle": 20,
+  "monthProgressPercent": 35,
+  "services": {
+    "email": {
+      "percentageUsed": 18,
+      "avgPerDay": 113,
+      "estimatedDaysLeft": 51,
+      "status": "ok"
+    },
+    "aiTokens": {
+      "percentageUsed": 18,
+      "avgPerDay": 4090,
+      "estimatedDaysLeft": 50,
+      "status": "ok",
+      "assistants": [
+        {
+          "assistantId": 1,
+          "assistantName": "Support Bot",
+          "percentageUsed": 18,
+          "estimatedDaysLeft": 50,
+          "status": "ok"
+        }
+      ]
+    },
+    "sms": {
+      "percentageUsed": 42,
+      "avgPerDay": 19,
+      "estimatedDaysLeft": 15,
+      "status": "warning"
+    },
+    "contacts": {
+      "percentageUsed": 28,
+      "avgPerDay": 8,
+      "estimatedDaysToLimit": 447,
+      "status": "ok"
+    },
+    "seats": {
+      "percentageUsed": 80,
+      "unlimited": false,
+      "status": "warning"
+    }
+  },
+  "onTrack": false,
+  "summaryMessage": "⚠️ Your SMS and team seat usage are trending high — you may exceed your limits before the month ends."
+}
+```
+
+**Status thresholds:**
+
+| Status     | Monthly-reset services       | Capacity services (contacts, seats) |
+| ---------- | ---------------------------- | ----------------------------------- |
+| `ok`       | usage% < monthProgress% + 10 | usage% < 75                         |
+| `warning`  | usage% ≥ monthProgress% + 10 | usage% ≥ 75                         |
+| `critical` | usage% ≥ 90 (any)            | usage% ≥ 90                         |
+
+- `monthProgressPercent` — percentage of the billing month that has elapsed (e.g. day 11 of 31 = 35%).
+- `onTrack: true` — all services are `ok`.
+- `summaryMessage` — ready-to-display string for the UI.
+
+---
+
+#### Full Usage Report (Modal)
+
+**GET `/usage/report`**
+
+Returns the full breakdown powering the "View Full Usage Report" modal.
+
+```json
+{
+  "reportGeneratedAt": "2026-03-11T23:00:00.000Z",
+  "billingCycleStart": "2026-03-01T00:00:00.000Z",
+  "billingCycleEnd": "2026-03-31T23:59:59.000Z",
+  "daysRemaining": 20,
+
+  "messaging": {
+    "sms": {
+      "used": 210,
+      "total": 500,
+      "percentageUsed": 42,
+      "avgPerDay": 19,
+      "estimatedDaysLeft": 15,
+      "activeNumbers": 2,
+      "voiceNumberLimit": 5
+    }
+  },
+
+  "email": {
+    "monthlySends": {
+      "used": 1240,
+      "total": 7000,
+      "percentageUsed": 18,
+      "avgPerDay": 113
+    },
+    "projectedEndOfMonth": 3500,
+    "remainingSends": 5760
+  },
+
+  "crm": {
+    "contacts": {
+      "used": 1420,
+      "total": 5000,
+      "percentageUsed": 28,
+      "avgGrowthPerDay": 8,
+      "gainedThisMonth": 88,
+      "projectedAtCurrentGrowth": 1580,
+      "estimatedDaysToLimit": 447
+    }
+  },
+
+  "team": {
+    "seats": {
+      "used": 4,
+      "total": 5,
+      "percentageUsed": 80,
+      "unlimited": false
+    },
+    "aiAssistants": {
+      "used": 2,
+      "total": 5,
+      "percentageUsed": 40,
+      "remainingSlots": 3,
+      "unlimited": false
+    }
+  },
+
+  "insights": {
+    "messaging": "You're using 42% of your SMS limit. At current rate, consider buying more messages in 15 days.",
+    "email": "Projected to use 3,500 emails by end of month. You're well within limits.",
+    "crm": "Contacts growing at +8/day. Consider upgrading in 447 days.",
+    "team": "You have 3 available AI assistant slots. Consider adding more assistants to automate workflows."
+  }
+}
+```
+
+- `projectedEndOfMonth` = `used + (avgPerDay × daysRemaining)`.
+- `gainedThisMonth` = contacts created since the 1st of the current calendar month.
+- `insights` strings are pre-built on the backend — display them directly in the UI.
+- Insights prefixed with `⚠️` indicate a service at risk of exceeding its limit.
+
+---
+
+**GET `/usage/report/pdf`**
+
+Streams a PDF version of the usage report.
+
+- **Response**: `Content-Type: application/pdf`
+- **Content-Disposition**: `attachment; filename="usage-report-YYYY-MM-DD.pdf"`
+
+The PDF contains the same four sections (Messaging, Email, CRM, Team) plus the Insights & Recommendations section, formatted as an A4 document. Values at risk (≥ 80% usage or projecting over limit) are highlighted in red.
