@@ -19,6 +19,11 @@
 - `scheduledForCancellation`: Active until `expiresAt`, then deactivates
 - Plan limits apply to `active` count only
 
+**Limits (`maxQuantity` vs `maxAllowed`):**
+
+- **`maxQuantity`**: A static property of the addon definition itself. It determines if an addon can be bought multiple times (`null`) or if it's a one-off feature (`1`). For instance, `EXTRA_SEAT` has `maxQuantity: null` (you can buy many), while `PRIORITY_SUPPORT` has `maxQuantity: 1` (you only buy it once).
+- **`maxAllowed`**: A dynamic limit tied to the user's specific subscription plan (`PlanType`), retrieved from their plan's features. It determines the maximum total amount they can hold. For example, a "Starter" plan might have `maxAllowed: 5` for extra seats. `maxAllowed` is what physically prevents the purchase when checking limits, while `maxQuantity` simply defines if the addon is stackable.
+
 **Billing Type vs Billing Interval:**
 
 These are two distinct fields returned on purchased addons:
@@ -238,12 +243,21 @@ PATCH /addon/multi-language/preferences
 
 **`GET /addon/available` (available addons):**
 
-- `billingInterval` — top-level, user's current plan billing interval
-- `category` — `"USAGE_PACK"` or `"FEATURE"` (see Addon Categories above)
-- `priceEur` — monthly base price in pence, always present
-- `yearlyPriceEur` — `priceEur × 12`, always present
-- `effectivePriceEur` — actual charge amount based on billing interval; use this for the primary price display
-- `currentQuantity`, `basePlanAllowance`, `maxAllowed`, `remainingPurchasable`, `isIncludedInPlan`
+- `id` — integer: The unique identifier of the addon definition.
+- `type` — string (`AddonType`): The system identifier for the addon (e.g., `EXTRA_SEAT`, `CRM_CALENDAR_SYNC`).
+- `category` — string: `"USAGE_PACK"` or `"FEATURE"` (see Addon Categories above).
+- `name` — string: The human-readable display name of the addon.
+- `priceEur` — number: The monthly base price in pence. Always present.
+- `yearlyPriceEur` — number: Equivalent yearly price (`priceEur × 12`). Always present.
+- `effectivePriceEur` — number: The actual charge amount based on billing interval. Use this for primary price display.
+- `billingType` — string (`AddonBillingType`): The pricing model, either `"RECURRING"` (subscription) or `"PER_USAGE"` (one-time).
+- `billingInterval` — string (`BillingInterval`): Top-level field indicating the user's current plan billing interval (`"MONTHLY"` or `"YEARLY"`).
+- `maxQuantity` — number | null: Determines if the addon is stackable. If `null`, multiple can be purchased. If `1`, it is a binary feature.
+- `currentQuantity` — number: The number of this addon the user currently has active.
+- `basePlanAllowance` — number: The quantity of this feature already included for free in the user's base plan.
+- `maxAllowed` — number | null: The maximum number of this addon the user is allowed to hold under their current plan. `null` means unlimited.
+- `remainingPurchasable` — number | null: The quantity calculated as `maxAllowed` - (`basePlanAllowance` + `currentQuantity`).
+- `isIncludedInPlan` — boolean: True if the feature is already fully covered by the base plan.
 
 **`GET /addon/purchased` (purchased addons):**
 
