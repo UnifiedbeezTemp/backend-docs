@@ -1,7 +1,3 @@
----
-sidebar_position: 4
----
-
 # FAQ Management — Frontend Integration Guide
 
 Covers all `/faq` endpoints: listing categories, creating and updating FAQs with multiple answer source types, searching with AI, and fetching leads triggered by FAQ interactions.
@@ -49,9 +45,9 @@ GET /faq
 GET /faq?category=SUPPORT
 ```
 
-| Query param | Type   | Required | Notes                             |
-| ----------- | ------ | -------- | --------------------------------- |
-| `category`  | string | no       | Filter by `FaqCategoryType` value |
+| Query param | Type   | Required | Notes                                                                                                                                                     |
+| ----------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `category`  | string | no       | Filter by `FaqCategoryType` value. Valid values: `GENERAL`, `PRODUCT`, `SUPPORT`, `BILLING`, `ONBOARDING`. Returns `400` if an invalid value is supplied. |
 
 **Response `200`**
 
@@ -390,8 +386,9 @@ Removes all FAQ trigger groups and associated lead captures for the current user
 
 ## Error Responses
 
-| Status | Scenario                                                                     |
-| ------ | ---------------------------------------------------------------------------- |
-| `400`  | Missing `question`, `categoryType`, or `answerSources` / invalid source type |
-| `401`  | Not authenticated                                                            |
-| `404`  | FAQ not found or belongs to another user                                     |
+| Status | Scenario                                                                                               |
+| ------ | ------------------------------------------------------------------------------------------------------ |
+| `400`  | Missing `question`, `categoryType`, or `answerSources` / invalid source type                           |
+| `400`  | Invalid `category` query param — value not in `GENERAL \| PRODUCT \| SUPPORT \| BILLING \| ONBOARDING` |
+| `401`  | Not authenticated                                                                                      |
+| `404`  | FAQ not found or belongs to another user                                                               |

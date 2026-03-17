@@ -1,7 +1,3 @@
----
-sidebar_position: 2
----
-
 # Automation Categories — Frontend Integration Guide
 
 > **Architecture note:** The campaign template layer has been removed. The 4 automation categories are now fixed system definitions — not user-created objects. The frontend GETs the static category definitions and POSTs directly to create an automation. Steps are auto-populated by the backend.
@@ -156,7 +152,7 @@ The backend auto-creates all predefined steps for the category with `isTemplateP
 | `triggers`           | no       | Max 1. Can be added later via `PUT /automations/:id`                                   |
 | `steps`              | no       | Extra steps appended after predefined ones (for SLG/SE/RN); all steps for REENGAGEMENT |
 
-**Response `201`** — raw automation record. Fetch `GET /automations/:id` for the full `{ logic, layout }` response.
+**Response `201`** — full automation object, same shape as `GET /automations/:id`. No follow-up fetch needed.
 
 ---
 
@@ -1067,6 +1063,72 @@ DELETE /campaign-lists/:id
 
 ---
 
+## Contacts
+
+### Create a contact (standalone)
+
+```
+POST /contacts
+```
+
+Creates a new contact and optionally enrolls them in one or more Campaign Lists at the same time. This is the bidirectional path — the contact form in the app that includes a list selector.
+
+Returns `409 Conflict` if a contact with the same email already exists in this account.
+
+**Request body:**
+
+```json
+{
+  "firstName": "Jane",
+  "lastName": "Doe",
+  "email": "jane@example.com",
+  "phone": "+447911123456",
+  "whatsappId": "+447911123456",
+  "facebookMessengerId": "1234567890",
+  "linkedInId": "jane-doe-1a2b3c",
+  "telegramId": "@janedoe",
+  "tagIds": [3, 7],
+  "notes": "High-value lapsed customer from 2024",
+  "campaignListIds": [1, 4]
+}
+```
+
+| Field                 | Required | Notes                                                                                                                                |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `firstName`           | **yes**  |                                                                                                                                      |
+| `email`               | **yes**  | Must be unique within the account — returns 409 if already exists                                                                    |
+| `lastName`            | no       |                                                                                                                                      |
+| `phone`               | no       | Include country code                                                                                                                 |
+| `whatsappId`          | no       | Used for WhatsApp outreach steps                                                                                                     |
+| `facebookMessengerId` | no       | Used for Messenger outreach steps                                                                                                    |
+| `linkedInId`          | no       | Used for LinkedIn outreach steps                                                                                                     |
+| `telegramId`          | no       | Used for Telegram outreach steps                                                                                                     |
+| `tagIds`              | no       | Array of tag IDs to apply                                                                                                            |
+| `notes`               | no       | Free-text notes                                                                                                                      |
+| `campaignListIds`     | no       | Array of Campaign List IDs to enroll the contact in. All IDs must belong to the authenticated user — returns 404 if any are invalid. |
+
+**Response `201`:**
+
+```json
+{
+  "id": 42,
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "phone": "+447911123456",
+  "source": "manual",
+  "whatsappId": "+447911123456",
+  "facebookMessengerId": "1234567890",
+  "linkedInId": "jane-doe-1a2b3c",
+  "telegramId": "@janedoe",
+  "createdAt": "2026-03-06T10:00:00.000Z",
+  "enrolledInLists": [1, 4]
+}
+```
+
+`enrolledInLists` is the array of Campaign List IDs the contact was successfully enrolled in. Empty array if `campaignListIds` was not provided.
+
+---
+
 ## Full Frontend Flow
 
 ```
@@ -1076,20 +1138,18 @@ DELETE /campaign-lists/:id
 2. User picks a category, enters a name
 
 3. POST /automations { name, automationCategory }
-       │  ← backend creates automation + N predefined steps
+       │  ← response is the full automation with logic.steps already populated
+       │    (no follow-up GET needed)
        ▼
-4. GET /automations/:id
-       │  ← all steps have completionStatus: "pending", config: {}
-       ▼
-5. User opens each step's config drawer
+4. User opens each step's config drawer
 
-6. PATCH /automations/:id/steps/:stepId { config: { ... } }
+5. PATCH /automations/:id/steps/:stepId { config: { ... } }
        │  ← repeat for each step
        ▼
-7. All steps completionStatus: "configured"
+6. All steps completionStatus: "configured"
        │
        ▼
-8. PATCH /automations/:id/status { status: "ACTIVE" }
+7. PATCH /automations/:id/status { status: "ACTIVE" }
 ```
 
 ---

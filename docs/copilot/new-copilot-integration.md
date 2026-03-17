@@ -138,12 +138,13 @@ Response: CopilotResponseDto
       {
         label: "Acme Electronics Inc.",
         value: {
+          id: "https://acme.com",
           name: "Acme Electronics Inc.",
           address: "123 Main St",
           phone: "+1234567890",
           website: "https://acme.com",
           logo_url: "https://...",
-          source: "google_places",
+          source: "google_search",
           confidence: 0.95
         },
         type: "radio",

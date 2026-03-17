@@ -1,7 +1,3 @@
----
-sidebar_position: 1
----
-
 # Automations — Frontend Integration Guide
 
 This document covers the full automation API: the `{ logic, layout }` response contract, all endpoints, step types, config shapes, status lifecycle, and execution routing.
@@ -26,7 +22,7 @@ interface AutomationResponse {
     trigger: TriggerNode | null;
     steps: LogicStep[];
   };
-  layout: CanvasLayout | null; // opaque JSON, stored as-is
+  layout: AutomationLayout | null;
   _count?: { executions: number };
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
@@ -63,20 +59,21 @@ interface LogicStep {
 }
 ```
 
-### `CanvasLayout`
+### `AutomationLayout`
 
-An opaque JSON blob owned by the frontend. The backend stores and returns it without modification.
+The layout captures visual concerns only — viewport position and group customisation. Nodes and edges are **not** stored; the frontend derives them from `logic.steps`.
 
 ```typescript
-interface CanvasLayout {
-  viewport?: { x: number; y: number; zoom: number };
-  nodes?: Record<string, { x: number; y: number }>;
-  groups?: Record<
-    string,
-    { x: number; y: number; width: number; height: number }
-  >;
-  links?: Record<string, { style?: Record<string, any> }>;
-  [key: string]: any;
+interface LayoutGroup {
+  id: string;
+  label?: string;
+  bgColor?: string;
+  position?: { x: number; y: number };
+}
+
+interface AutomationLayout {
+  viewport: { x: number; y: number; zoom: number };
+  groups: LayoutGroup[];
 }
 ```
 
@@ -745,7 +742,7 @@ POST /automations
 - For `SALES_LEAD_GENERATION`, `SUPPORT_ESCALATION`, `RETENTION_NURTURE`: backend auto-creates predefined steps with `isTemplatePrefilled: true`.
 - For `REENGAGEMENT_CAMPAIGNS`: blank slate — use `POST /automation-templates/:id/apply` (recommended) or add steps manually afterward.
 
-**Response `201`** — raw automation record. Fetch `GET /automations/:id` for the full `{ logic, layout }` output.
+**Response `201`** — full automation object, same shape as `GET /automations/:id`. No follow-up fetch needed.
 
 ---
 
@@ -903,17 +900,19 @@ PATCH /automations/:id/status
 PATCH /automations/:id/layout
 ```
 
-Call this **debounced** (e.g. 1 second after last drag). The backend stores the JSON opaquely.
+Call this **debounced** (e.g. 1 second after last drag). Send `viewport` and `groups` directly — do not wrap in a `layout` key. Nodes and edges are not stored here; they are derived from `logic.steps` on the frontend.
 
 ```json
 {
-  "layout": {
-    "viewport": { "x": -120, "y": -80, "zoom": 0.85 },
-    "nodes": {
-      "200": { "x": 400, "y": 100 },
-      "201": { "x": 400, "y": 250 }
+  "viewport": { "x": -120, "y": -80, "zoom": 0.85 },
+  "groups": [
+    {
+      "id": "group-1",
+      "label": "Lead Capture",
+      "bgColor": "#f0f4ff",
+      "position": { "x": 100, "y": 80 }
     }
-  }
+  ]
 }
 ```
 
@@ -1044,6 +1043,18 @@ When an automation is created under SLG, SE, or RN, the backend auto-creates pre
 ## TypeScript Reference
 
 ```typescript
+interface LayoutGroup {
+  id: string;
+  label?: string;
+  bgColor?: string;
+  position?: { x: number; y: number };
+}
+
+interface AutomationLayout {
+  viewport: { x: number; y: number; zoom: number };
+  groups: LayoutGroup[];
+}
+
 type AutomationStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "ARCHIVED";
 
 type AutomationTemplateCategory =
@@ -1070,7 +1081,7 @@ interface TriggerNode {
 }
 
 interface LogicStep {
-  id: string; // stringified DB id — parse to int for PATCH endpoint
+  id: string; // stringified DB — parse to int for PATCH endpoint
   type: StepTypeRole;
   stepKey: string;
   label: string;
@@ -1096,7 +1107,7 @@ interface AutomationResponse {
     trigger: TriggerNode | null;
     steps: LogicStep[];
   };
-  layout: Record<string, any> | null;
+  layout: AutomationLayout | null;
   _count?: { executions: number };
   createdAt: string;
   updatedAt: string;
@@ -1114,20 +1125,19 @@ interface AutomationResponse {
 const categories = await fetch("/automations/categories").then((r) => r.json());
 const slg = categories.find((c) => c.category === "SALES_LEAD_GENERATION");
 
-// 2. Create automation (backend auto-populates 10 predefined steps)
-const { id } = await fetch("/automations", {
+// 2. Create automation — response already includes full { logic, layout } shape
+const automation = await fetch("/automations", {
   method: "POST",
   body: JSON.stringify({
     name: "My SLG Setup",
     automationCategory: "SALES_LEAD_GENERATION",
   }),
 }).then((r) => r.json());
-
-// 3. Get automation with predefined steps
-const automation = await fetch(`/automations/${id}`).then((r) => r.json());
 // automation.logic.steps → 10 steps, all type: "auto", completionStatus: "pending"
 
-// 4. Configure step 0 (webchat install)
+const { id } = automation;
+
+// 3. Configure step 0 (webchat install)
 const stepId = parseInt(automation.logic.steps[0].id);
 await fetch(`/automations/${id}/steps/${stepId}`, {
   method: "PATCH",
@@ -1173,12 +1183,13 @@ const automation = await fetch(
 ```typescript
 let saveTimer: ReturnType<typeof setTimeout>;
 
-function onCanvasDrag(automationId: number, layout: CanvasLayout) {
+function onCanvasDrag(automationId: number, layout: AutomationLayout) {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     fetch(`/automations/${automationId}/layout`, {
       method: "PATCH",
-      body: JSON.stringify({ layout }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(layout), // send viewport + groups directly, no wrapper key
     });
   }, 1000);
 }
