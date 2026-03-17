@@ -86,7 +86,7 @@ Response: CopilotResponseDto
   },
 
   noReplyConfiguration: {
-    newValue: "escalate" | "followUp" | "none",
+    newValue: "wait" | "escalate" | "followUp",
     validation: "Must be one of three values"
   },
 

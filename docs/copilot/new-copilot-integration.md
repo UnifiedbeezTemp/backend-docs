@@ -354,7 +354,37 @@ Response: CopilotResponseDto
 }
 ```
 
-### 8. Delete Assistant
+### 8. Edit Logo
+
+```typescript
+POST /copilot/edit-logo
+Content-Type: multipart/form-data
+
+Request:
+{
+  logo: File,                    // Max 5MB, PNG/JPG/WEBP only
+  substepId: string              // ID of the substep to update logo for
+}
+
+Response: CopilotResponseDto
+{
+  currentSubstep: { ... },       // Returns updated substep after logo change
+  uiDirectives: {
+    components: [
+      {
+        name: "businessLogo",
+        metadata: {
+          logoUrl: "https://s3.../business-logos/123/uuid.png",
+          businessName: "Acme Electronics",
+          website: null
+        }
+      }
+    ]
+  }
+}
+```
+
+### 9. Delete Assistant
 
 ```typescript
 DELETE /copilot/assistants/:assistantId
@@ -388,7 +418,7 @@ Response: CopilotResponseDto
 }
 ```
 
-### 9. Add Assistant
+### 10. Add Assistant
 
 ```typescript
 POST /copilot/assistants
@@ -442,7 +472,7 @@ Response: CopilotResponseDto
 }
 ```
 
-### 10. Restart Conversation
+### 11. Restart Conversation
 
 ```typescript
 POST /copilot/restart
@@ -573,6 +603,8 @@ Flow Hierarchy:
 │
 ├── teamMembers (Section)
 │   ├── teamSize (entry point)
+│   ├── inviteTeam (conditional - size >= 2)
+│   ├── inviteTeamLater (conditional - size == 1)
 │   ├── teamSizeOverLimit (conditional - plan validation failed)
 │   ├── teamPlanDetails (conditional)
 │   ├── teamUpgradeOptions (conditional)
