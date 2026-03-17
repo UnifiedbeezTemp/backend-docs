@@ -1253,3 +1253,5 @@ interface CampaignListResponse {
   updatedAt: string;
 }
 ```
+
+<!--  -->
