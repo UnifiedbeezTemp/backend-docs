@@ -45,9 +45,11 @@ GET /faq
 GET /faq?category=SUPPORT
 ```
 
-| Query param | Type   | Required | Notes                                                                                                                                                     |
-| ----------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `category`  | string | no       | Filter by `FaqCategoryType` value. Valid values: `GENERAL`, `PRODUCT`, `SUPPORT`, `BILLING`, `ONBOARDING`. Returns `400` if an invalid value is supplied. |
+| Query param | Type   | Required | Notes                                                                             |
+| ----------- | ------ | -------- | --------------------------------------------------------------------------------- |
+| `category`  | string | no       | Filter by `FaqCategoryType` value. Returns `400` if an invalid value is supplied. |
+
+Each FAQ in the response includes `isConfigured: boolean` — `true` when at least one answer source exists. Only configured FAQs are eligible to be used by the AI. Use this flag to surface draft FAQs in the UI.
 
 **Response `200`**
 
@@ -74,6 +76,7 @@ GET /faq?category=SUPPORT
       "timeOfDay": null,
       "teamMemberEmails": ["support@example.com"]
     },
+    "isConfigured": true,
     "triggerCount": 14,
     "createdAt": "2026-02-01T10:00:00.000Z",
     "updatedAt": "2026-02-10T08:30:00.000Z"
@@ -99,9 +102,21 @@ GET /faq?category=SUPPORT
       }
     ],
     "notificationConfig": null,
+    "isConfigured": true,
     "triggerCount": 7,
     "createdAt": "2026-02-05T11:00:00.000Z",
     "updatedAt": "2026-02-05T11:00:00.000Z"
+  },
+  {
+    "id": 13,
+    "question": "How do I upgrade my plan?",
+    "categoryType": "BILLING",
+    "answerSources": [],
+    "notificationConfig": null,
+    "isConfigured": false,
+    "triggerCount": 0,
+    "createdAt": "2026-03-18T09:00:00.000Z",
+    "updatedAt": "2026-03-18T09:00:00.000Z"
   }
 ]
 ```
@@ -114,7 +129,20 @@ GET /faq?category=SUPPORT
 POST /faq
 ```
 
-**Request body**
+Only `question` and `categoryType` are required. `answerSources` and `notificationConfig` can be added later via `PUT /faq/:faqId`.
+
+> A FAQ without answer sources will **not** be used by the AI until sources are added. See `isConfigured` in the list response.
+
+**Minimal request body (draft)**
+
+```json
+{
+  "categoryType": "SUPPORT",
+  "question": "How do I cancel my subscription?"
+}
+```
+
+**Full request body**
 
 ```json
 {
@@ -211,6 +239,7 @@ When a FAQ is triggered by a contact, you can notify team members automatically.
     "timeOfDay": null,
     "teamMemberEmails": ["billing@example.com"]
   },
+  "isConfigured": true,
   "triggerCount": 0,
   "createdAt": "2026-03-01T12:00:00.000Z",
   "updatedAt": "2026-03-01T12:00:00.000Z"
@@ -225,7 +254,20 @@ When a FAQ is triggered by a contact, you can notify team members automatically.
 PUT /faq/:faqId
 ```
 
-Partial update — only include fields you want to change. Same shape as the create body.
+Partial update — only include fields you want to change. Same shape as the create body. Use this to complete a draft FAQ by adding answer sources for the first time — this is also when the AI embedding is created.
+
+**Example: complete a draft FAQ by adding answer sources**
+
+```json
+{
+  "answerSources": [
+    {
+      "type": "TEXT",
+      "content": "You can cancel from the Billing page under Settings."
+    }
+  ]
+}
+```
 
 **Example: add a website source to an existing FAQ**
 
@@ -386,9 +428,10 @@ Removes all FAQ trigger groups and associated lead captures for the current user
 
 ## Error Responses
 
-| Status | Scenario                                                                                               |
-| ------ | ------------------------------------------------------------------------------------------------------ |
-| `400`  | Missing `question`, `categoryType`, or `answerSources` / invalid source type                           |
-| `400`  | Invalid `category` query param — value not in `GENERAL \| PRODUCT \| SUPPORT \| BILLING \| ONBOARDING` |
-| `401`  | Not authenticated                                                                                      |
-| `404`  | FAQ not found or belongs to another user                                                               |
+| Status | Scenario                                                                                         |
+| ------ | ------------------------------------------------------------------------------------------------ |
+| `400`  | Missing `question` or `categoryType` on create                                                   |
+| `400`  | Invalid answer source type, or `content`/`websiteUrl`/`fileId` missing for the given source type |
+| `400`  | Invalid `category` query param                                                                   |
+| `401`  | Not authenticated                                                                                |
+| `404`  | FAQ not found or belongs to another user                                                         |
