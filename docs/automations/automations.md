@@ -735,7 +735,8 @@ POST /automations
 
 **Constraints:**
 
-- `name` and `automationCategory` are required.
+- `name` and `automationCategory` are required. `name` is trimmed — a whitespace-only string is rejected.
+- `automationCategory` must be a valid `AutomationTemplateCategory` enum value.
 - `campaignListId` is optional — for `REENGAGEMENT_CAMPAIGNS` only; scopes the `ACTIVITY_THRESHOLD` trigger to contacts on that list.
 - `triggers` is optional — max 1 if provided.
 - `steps` is optional — these are appended after the auto-created predefined steps.
@@ -855,6 +856,8 @@ PUT /automations/:id
 ```
 
 Partial update of automation metadata, triggers, and steps. When `triggers` or `steps` are provided, existing records are **deleted and recreated**.
+
+**Response `200`** — full automation object, same shape as `GET /automations/:id`. No follow-up fetch needed.
 
 ---
 
@@ -1033,10 +1036,10 @@ When an automation is created under SLG, SE, or RN, the backend auto-creates pre
 
 ## Error Responses
 
-| Status | Scenario                                                                           |
-| ------ | ---------------------------------------------------------------------------------- |
-| `400`  | Missing `name` or `automationCategory` / more than 1 trigger / invalid step config |
-| `404`  | Automation or step not found or belongs to another user                            |
+| Status | Scenario                                                                                                                                                                        |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | Missing required field / empty or whitespace-only `name` / invalid enum value / negative or zero integer / more than 1 trigger / missing body on any endpoint that requires one |
+| `404`  | Automation or step not found or belongs to another user                                                                                                                         |
 
 ---
 
