@@ -235,49 +235,63 @@ step[order=N] → nextStepIds: []   // last step
 
 The send-message step supports three channels. Set `messageType` to select the channel — the remaining fields differ per channel.
 
-| Field             | Type           | Required               | Notes                                          |
-| ----------------- | -------------- | ---------------------- | ---------------------------------------------- |
-| `messageType`     | string         | **yes**                | `"MARKETING_EMAIL"` \| `"WHATSAPP"` \| `"SMS"` |
-| `emailTemplateId` | number \| null | for `MARKETING_EMAIL`  | ID of a saved email template                   |
-| `customMessage`   | string \| null | for `WHATSAPP` / `SMS` | Plain text or template variables               |
-| `sendingTime`     | string \| null | no                     | HH:MM preferred send time (e.g. `"09:00"`)     |
+| Field               | Type           | Required               | Notes                                                                                                                                    |
+| ------------------- | -------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `messageType`       | string         | **yes**                | `"MARKETING_EMAIL"` \| `"WHATSAPP"` \| `"SMS"`                                                                                           |
+| `emailTemplateId`   | number \| null | for `MARKETING_EMAIL`  | ID of a saved email template                                                                                                             |
+| `customMessage`     | string \| null | for `WHATSAPP` / `SMS` | Plain text or template variables                                                                                                         |
+| `sendingTime`       | string \| null | no                     | HH:MM preferred send time (e.g. `"09:00"`)                                                                                               |
+| `emailConfigId`     | number \| null | no                     | **Step-level override**: use this specific email config. Takes priority over the automation-level `emailConfigId`.                       |
+| `whatsappAccountId` | number \| null | no                     | **Step-level override**: use this specific WhatsApp account. Takes priority over the automation-level `outreachChannelId`.               |
+| `smsAccountId`      | number \| null | no                     | **Step-level override**: use this specific SMS account / purchased number. Takes priority over the automation-level `outreachChannelId`. |
+
+#### Account resolution priority
+
+| Channel  | Priority order                                                                                           |
+| -------- | -------------------------------------------------------------------------------------------------------- |
+| Email    | Step `emailConfigId` → Automation `emailConfigId` → Global "automations" account                         |
+| WhatsApp | Step `whatsappAccountId` (direct) → Automation `outreachChannelId` (channel filter) → Any active account |
+| SMS      | Step `smsAccountId` (direct) → Automation `outreachChannelId` (channel filter) → Any active account      |
 
 #### Channel: MARKETING_EMAIL
 
-Use `emailTemplateId` to send a pre-built template, or `customMessage` to send ad-hoc HTML/text.
+Use `emailTemplateId` to send a pre-built template, or `customMessage` to send ad-hoc HTML/text. Optionally pin a specific email config at the step level with `emailConfigId`.
 
 ```json
 {
   "messageType": "MARKETING_EMAIL",
   "emailTemplateId": 14,
   "customMessage": null,
-  "sendingTime": "09:00"
+  "sendingTime": "09:00",
+  "emailConfigId": 7
 }
 ```
 
 #### Channel: WHATSAPP
 
-Set `customMessage` to the message body. The backend resolves the active WhatsApp account for the user. `sendingTime` is respected if set.
+Set `customMessage` to the message body. The backend resolves the active WhatsApp account for the user (or the specific one set via `whatsappAccountId`). `sendingTime` is respected if set.
 
 ```json
 {
   "messageType": "WHATSAPP",
   "emailTemplateId": null,
   "customMessage": "Hi {customer.name}, we miss you! Check out what's new: {business.name}",
-  "sendingTime": null
+  "sendingTime": null,
+  "whatsappAccountId": 3
 }
 ```
 
 #### Channel: SMS
 
-Same as WhatsApp — `customMessage` is the message body. The recipient's phone number is resolved from their contact record.
+Same as WhatsApp — `customMessage` is the message body. The recipient's phone number is resolved from their contact record. Optionally pin the specific SMS account (purchased number) with `smsAccountId`.
 
 ```json
 {
   "messageType": "SMS",
   "emailTemplateId": null,
   "customMessage": "Hey {customer.name}, here's an exclusive offer just for you.",
-  "sendingTime": "10:00"
+  "sendingTime": "10:00",
+  "smsAccountId": 5
 }
 ```
 
@@ -322,16 +336,60 @@ Only one of `waitMinutes`, `waitHours`, `waitDays` needs to be set.
     {
       "conditionOrder": 0,
       "logicOperator": "AND",
+      "groupId": "group-a",
       "conditionType": "field",
-      "fieldName": "leadStatus",
+      "fieldName": "country",
       "operator": "EQUALS",
-      "value": "qualified"
+      "value": "US"
+    },
+    {
+      "conditionOrder": 1,
+      "logicOperator": "AND",
+      "groupId": "group-a",
+      "conditionType": "field",
+      "fieldName": "createdAt",
+      "operator": "IS_AFTER",
+      "value": "RELATIVE:-30d"
+    },
+    {
+      "conditionOrder": 2,
+      "logicOperator": "OR",
+      "groupId": "group-b",
+      "conditionType": "campaign_list",
+      "targetCampaignListId": 5,
+      "operator": null,
+      "value": "SUBSCRIBED"
     }
   ],
   "trueNextStepId": null,
   "falseNextStepId": null
 }
 ```
+
+**`conditionType` values:**
+
+| `conditionType`   | What it checks                                                                    |
+| ----------------- | --------------------------------------------------------------------------------- |
+| `"field"`         | A contact field (use `fieldName` + `operator` + `value`)                          |
+| `"campaign"`      | Campaign membership (use `targetLeadGenerationCampaignId`)                        |
+| `"campaign_list"` | List membership status (use `targetCampaignListId` + `value` for status)          |
+| `"trigger"`       | The trigger type that started this execution (use `triggerType`)                  |
+| `"activity"`      | Past contact activity — e.g. has opened email (use `triggerType` as activity key) |
+
+**`value` for `campaign_list` conditions:**
+
+| `value`              | Meaning                          |
+| -------------------- | -------------------------------- |
+| `"SUBSCRIBED"`       | Currently subscribed (default)   |
+| `"UNSUBSCRIBED"`     | Unsubscribed                     |
+| `"UNCONFIRMED"`      | Double-opt-in pending            |
+| `"BOUNCED_HARD"`     | Hard bounced                     |
+| `"NEVER_SUBSCRIBED"` | Never been on this list          |
+| `"EVER_ADDED"`       | Has ever been added (any status) |
+
+**Relative date values:** `value` supports `"RELATIVE:<sign><amount><unit>"` where unit is `d` (days), `w` (weeks), `m` (months), `y` (years). Example: `"RELATIVE:-7d"` means "7 days ago".
+
+**Condition grouping:** Conditions with the same `groupId` are AND-ed together; different groups are OR-ed. If no `groupId` is set, the legacy `logicOperator` boundary heuristic applies.
 
 `trueNextStepId` / `falseNextStepId` are only relevant for `REENGAGEMENT_CAMPAIGNS` automations.
 
@@ -651,13 +709,23 @@ Returns all available **triggers**, **action steps**, **condition steps**, **con
     { "value": "CONTAINS", "label": "Contains" },
     { "value": "NOT_CONTAINS", "label": "Not Contains" },
     { "value": "STARTS_WITH", "label": "Starts With" },
+    { "value": "DOES_NOT_START_WITH", "label": "Does Not Start With" },
     { "value": "ENDS_WITH", "label": "Ends With" },
     { "value": "GREATER_THAN", "label": "Greater Than" },
+    { "value": "GREATER_THAN_OR_EQUAL", "label": "Greater Than Or Equal" },
     { "value": "LESS_THAN", "label": "Less Than" },
+    { "value": "LESS_THAN_OR_EQUAL", "label": "Less Than Or Equal" },
     { "value": "IS_EMPTY", "label": "Is Empty" },
     { "value": "IS_NOT_EMPTY", "label": "Is Not Empty" },
     { "value": "IS_TRUE", "label": "Is True" },
-    { "value": "IS_FALSE", "label": "Is False" }
+    { "value": "IS_FALSE", "label": "Is False" },
+    { "value": "IS_AFTER", "label": "Is After" },
+    { "value": "IS_BEFORE", "label": "Is Before" },
+    { "value": "IS_ON_OR_AFTER", "label": "Is On Or After" },
+    { "value": "IS_ON_OR_BEFORE", "label": "Is On Or Before" },
+    { "value": "BETWEEN", "label": "Between" },
+    { "value": "IS_ONE_OF", "label": "Is One Of" },
+    { "value": "IS_NOT_ONE_OF", "label": "Is Not One Of" }
   ],
   "conditionLogic": [
     { "value": "AND", "label": "All conditions must match (AND)" },
@@ -855,7 +923,63 @@ Note: the `stepId` in the URL is the integer DB ID — parse `LogicStep.id` (whi
 PUT /automations/:id
 ```
 
-Partial update of automation metadata, triggers, and steps. When `triggers` or `steps` are provided, existing records are **deleted and recreated**.
+Partial update of automation metadata, triggers, and steps. All fields are optional — only the fields you supply are changed. When `triggers` or `steps` are provided, the existing records are **deleted and recreated** in full.
+
+**Request body** (all fields optional)
+
+```json
+{
+  "name": "Updated Name",
+  "description": "Optional",
+  "campaignListId": 5,
+  "startType": "TRIGGER_BASED",
+  "sourceFilterEnabled": false,
+  "allowedSources": [],
+  "inactivityFilterEnabled": false,
+  "inactivityThreshold": null,
+  "inactivityUnit": null,
+  "tagFilterEnabled": false,
+  "allowedTagIds": [],
+  "statusFilterEnabled": false,
+  "allowedStatuses": [],
+  "triggers": [
+    {
+      "triggerType": "ACTIVITY_THRESHOLD",
+      "name": "30-day inactive",
+      "conditions": [
+        {
+          "conditionOrder": 0,
+          "logicOperator": null,
+          "groupId": null,
+          "operator": "GREATER_THAN",
+          "value": "30",
+          "fieldName": null,
+          "targetCampaignListId": null,
+          "targetLeadGenerationCampaignId": null,
+          "targetTagGroupId": null,
+          "targetFaqGroupId": null
+        }
+      ]
+    }
+  ],
+  "steps": []
+}
+```
+
+**Condition fields** in `triggers[].conditions[]`:
+
+| Field                            | Type                        | Notes                                                                          |
+| -------------------------------- | --------------------------- | ------------------------------------------------------------------------------ |
+| `conditionOrder`                 | integer                     | 0-based ordering                                                               |
+| `logicOperator`                  | `"AND"` \| `"OR"` \| null   | Legacy per-condition logic                                                     |
+| `groupId`                        | string \| null              | Conditions sharing a `groupId` are AND-ed together; different groups are OR-ed |
+| `fieldName`                      | string \| null              | Contact field path for `field` conditions                                      |
+| `operator`                       | `ConditionOperator` \| null | See operator values below                                                      |
+| `value`                          | string \| null              | Comparison value; use `"RELATIVE:-7d"` for relative date expressions           |
+| `targetCampaignListId`           | integer \| null             | Target campaign list for list-membership conditions                            |
+| `targetLeadGenerationCampaignId` | integer \| null             | Target lead generation campaign for campaign conditions                        |
+| `targetTagGroupId`               | integer \| null             | Target tag group                                                               |
+| `targetFaqGroupId`               | integer \| null             | Target FAQ group                                                               |
 
 **Response `200`** — full automation object, same shape as `GET /automations/:id`. No follow-up fetch needed.
 
