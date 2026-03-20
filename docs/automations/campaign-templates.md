@@ -137,20 +137,19 @@ The backend auto-creates all predefined steps for the category with `isTemplateP
   "allowedTagIds": [],
   "statusFilterEnabled": false,
   "allowedStatuses": [],
-  "triggers": [],
   "steps": []
 }
 ```
 
-| Field                | Required | Notes                                                                                  |
-| -------------------- | -------- | -------------------------------------------------------------------------------------- |
-| `name`               | **yes**  |                                                                                        |
-| `automationCategory` | **yes**  | One of the 4 enum values                                                               |
-| `description`        | no       |                                                                                        |
-| `campaignListId`     | no       | For `REENGAGEMENT_CAMPAIGNS` only — scopes the trigger to contacts on this list        |
-| `startType`          | no       | `"TRIGGER_BASED"` (default) or `"ACTION_BASED"`                                        |
-| `triggers`           | no       | Max 1. Can be added later via `PUT /automations/:id`                                   |
-| `steps`              | no       | Extra steps appended after predefined ones (for SLG/SE/RN); all steps for REENGAGEMENT |
+| Field                | Required | Notes                                                                                                                                                                                                                             |
+| -------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`               | **yes**  |                                                                                                                                                                                                                                   |
+| `automationCategory` | **yes**  | One of the 4 enum values                                                                                                                                                                                                          |
+| `description`        | no       |                                                                                                                                                                                                                                   |
+| `campaignListId`     | no       | For `REENGAGEMENT_CAMPAIGNS` only — scopes the trigger to contacts on this list                                                                                                                                                   |
+| `startType`          | no       | `"TRIGGER_BASED"` (default) or `"ACTION_BASED"`                                                                                                                                                                                   |
+| `triggers`           | no       | Legacy — max 1. Prefer using steps with `triggerType` instead.                                                                                                                                                                    |
+| `steps`              | no       | Unified steps array. Steps with `triggerType` are extracted as triggers. Regular steps are appended after predefined ones (SLG/SE/RN) or used directly (REENGAGEMENT). Accepts `clientId` and `nextStepId` for cross-referencing. |
 
 **Response `201`** — full automation object, same shape as `GET /automations/:id`. No follow-up fetch needed.
 
@@ -689,110 +688,11 @@ Creates a new `REENGAGEMENT_CAMPAIGNS` automation with all steps and triggers pr
 
 | Field            | Type   | Required | Notes                                                                                                                     |
 | ---------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `name`           | string | **yes**  | Name of the new automation                                                                                                |
+| `name`           | string | **yes**  | Name of the new automation. Trimmed — whitespace-only is rejected.                                                        |
 | `description`    | string | no       | Optional description                                                                                                      |
 | `campaignListId` | number | no       | ID of the Campaign List that scopes this automation's contact pool. The trigger will only fire for contacts on this list. |
 
-**Response `201`** — full automation object (same shape as `GET /automations/:id`):
-
-```json
-{
-  "id": 42,
-  "name": "My Win-back Campaign",
-  "description": "Re-engage contacts inactive for 30+ days",
-  "category": "REENGAGEMENT_CAMPAIGNS",
-  "isActive": false,
-  "triggers": [
-    {
-      "id": 10,
-      "triggerType": "ACTIVITY_THRESHOLD",
-      "name": "Contact inactive for 30 days",
-      "conditions": [
-        {
-          "id": 5,
-          "conditionOrder": 0,
-          "operator": "GREATER_THAN",
-          "value": "30"
-        }
-      ]
-    }
-  ],
-  "steps": [
-    {
-      "id": 101,
-      "stepIndex": 0,
-      "stepType": "WAIT",
-      "name": "Initial delay",
-      "isDefault": false,
-      "locked": false,
-      "required": false,
-      "nextStepId": 102,
-      "config": { "waitDays": 7 }
-    },
-    {
-      "id": 102,
-      "stepIndex": 1,
-      "stepType": "SEND_MESSAGE",
-      "name": "Re-engagement email",
-      "isDefault": false,
-      "locked": false,
-      "required": false,
-      "nextStepId": 103,
-      "config": {
-        "messageType": "MARKETING_EMAIL",
-        "customMessage": "Hi {customer.name}, we miss you!",
-        "sendingTime": "09:00"
-      }
-    },
-    {
-      "id": 103,
-      "stepIndex": 2,
-      "stepType": "SMART_RULE",
-      "name": "Did they open the email?",
-      "isDefault": false,
-      "locked": false,
-      "required": false,
-      "nextStepId": null,
-      "trueNextStepId": 104,
-      "falseNextStepId": 105,
-      "config": {
-        "conditions": [
-          {
-            "conditionOrder": 0,
-            "conditionType": "trigger",
-            "triggerType": "OPENS_EMAIL"
-          }
-        ]
-      }
-    },
-    {
-      "id": 104,
-      "stepIndex": 3,
-      "stepType": "TAG_ACTION",
-      "name": "Mark as re-engaged",
-      "isDefault": false,
-      "locked": false,
-      "required": false,
-      "nextStepId": null,
-      "config": { "action": "ADD", "tagName": "re-engaged" }
-    },
-    {
-      "id": 105,
-      "stepIndex": 4,
-      "stepType": "SEND_MESSAGE",
-      "name": "WhatsApp follow-up",
-      "isDefault": false,
-      "locked": false,
-      "required": false,
-      "nextStepId": null,
-      "config": {
-        "messageType": "WHATSAPP",
-        "customMessage": "Hey {customer.name}, we'd love to have you back!"
-      }
-    }
-  ]
-}
-```
+**Response `201`** — full automation object (same `{ logic, layout }` shape as `GET /automations/:id`). The trigger is included both in `logic.trigger` (backward-compat) and as the first entry in `logic.steps` with `type: "trigger"`. See the [Automations response contract](automations.md#response-contract-logic-layout) for the full TypeScript interface.
 
 ---
 
@@ -1253,5 +1153,3 @@ interface CampaignListResponse {
   updatedAt: string;
 }
 ```
-
-<!--  -->

@@ -19,8 +19,8 @@ interface AutomationResponse {
   logicVersion: string; // e.g. "1.0.0"
   logic: {
     version: string;
-    trigger: TriggerNode | null;
-    steps: LogicStep[];
+    trigger: TriggerNode | null; // backward-compat — same data is also in steps[0] when type="trigger"
+    steps: LogicStep[]; // unified: trigger (if any) is the first entry, followed by action/condition/auto steps
   };
   layout: AutomationLayout | null;
   _count?: { executions: number };
@@ -29,7 +29,7 @@ interface AutomationResponse {
 }
 ```
 
-### `TriggerNode`
+### `TriggerNode` (backward-compat)
 
 ```typescript
 interface TriggerNode {
@@ -41,17 +41,19 @@ interface TriggerNode {
 }
 ```
 
+> **Note:** The trigger is also available as the first entry in `logic.steps` (when `type === "trigger"`). The `logic.trigger` field is kept for backward compatibility — prefer using the unified `steps` array.
+
 ### `LogicStep`
 
 ```typescript
 interface LogicStep {
-  id: string; // stringified step DB id
-  type: "action" | "condition" | "auto"; // semantic role — see Step Type Roles
-  stepKey: string; // kebab-case routing key (see Step Key Reference)
+  id: string; // stringified step DB id, or "trigger-{id}" for trigger steps
+  type: "trigger" | "action" | "condition" | "auto"; // semantic role — see Step Type Roles
+  stepKey: string; // kebab-case routing key (see Step Key Reference); "trigger" for trigger steps
   label: string; // human-readable name
-  order: number; // stepOrder from DB (0-based for predefined steps)
-  config: Record<string, any>; // flattened step config (see per-step shapes)
-  nextStepIds: string[]; // computed for linear categories; explicit for REENGAGEMENT
+  order: number; // stepOrder from DB (0-based for predefined steps; -1 for trigger)
+  config: Record<string, any>; // flattened step config; for triggers: { triggerType, conditions }
+  nextStepIds: string[]; // computed for linear categories; explicit for REENGAGEMENT; trigger points to first step
   completionStatus: "pending" | "configured"; // "error" is client-side only
   isDefault: boolean; // true = auto-created by backend (predefined step)
   locked: boolean; // true = step order is fixed (same as isDefault)
@@ -85,6 +87,7 @@ The `type` field classifies each step's semantic role:
 
 | `type`        | Applies to                                                               |
 | ------------- | ------------------------------------------------------------------------ |
+| `"trigger"`   | The automation's trigger step (first entry in the unified steps array)   |
 | `"action"`    | `SEND_MESSAGE`, `WAIT`, `AUTOMATION_LIST`, `TAG_ACTION`, `STATUS_CHANGE` |
 | `"condition"` | `SMART_RULE`, `TRIGGER_CONDITION`                                        |
 | `"auto"`      | All predefined template steps: `SLG_*`, `SE_*`, `RN_*`                   |
@@ -765,7 +768,7 @@ POST /automations
 }
 ```
 
-**Full body (all optional fields):**
+**Full body (unified model — recommended):**
 
 ```json
 {
@@ -783,21 +786,51 @@ POST /automations
   "allowedTagIds": [],
   "statusFilterEnabled": false,
   "allowedStatuses": [],
-  "triggers": [
+  "steps": [
     {
-      "triggerType": "ACTIVITY_THRESHOLD",
+      "clientId": "uuid-trigger-1",
+      "stepOrder": 0,
+      "stepType": "SEND_MESSAGE",
       "name": "30-day inactive",
-      "conditions": [
+      "triggerType": "ACTIVITY_THRESHOLD",
+      "triggerConditions": [
         {
           "conditionOrder": 0,
           "logicOperator": null,
           "operator": "GREATER_THAN",
           "value": "30"
         }
+      ],
+      "nextStepId": "uuid-step-1"
+    },
+    {
+      "clientId": "uuid-step-1",
+      "stepOrder": 0,
+      "stepType": "WAIT",
+      "name": "Wait 1 day",
+      "nextStepId": "uuid-step-2"
+    }
+  ]
+}
+```
+
+Steps with `triggerType` are extracted as triggers; regular steps are stored as `AutomationStep` records.
+
+**Frontend-generated IDs:** The `clientId` field accepts any string (e.g. `crypto.randomUUID()`). It is not stored in the DB but is used to resolve `nextStepId` cross-references within the same request. After creation, the response returns DB-generated IDs.
+
+**Legacy `triggers` array** is still accepted for backward compatibility:
+
+```json
+{
+  "triggers": [
+    {
+      "triggerType": "ACTIVITY_THRESHOLD",
+      "name": "30-day inactive",
+      "conditions": [
+        { "conditionOrder": 0, "operator": "GREATER_THAN", "value": "30" }
       ]
     }
-  ],
-  "steps": []
+  ]
 }
 ```
 
@@ -806,8 +839,8 @@ POST /automations
 - `name` and `automationCategory` are required. `name` is trimmed — a whitespace-only string is rejected.
 - `automationCategory` must be a valid `AutomationTemplateCategory` enum value.
 - `campaignListId` is optional — for `REENGAGEMENT_CAMPAIGNS` only; scopes the `ACTIVITY_THRESHOLD` trigger to contacts on that list.
-- `triggers` is optional — max 1 if provided.
-- `steps` is optional — these are appended after the auto-created predefined steps.
+- Max 1 trigger total (whether via `triggerType` on a step or the legacy `triggers` array).
+- `steps` is optional — regular steps (without `triggerType`) are appended after the auto-created predefined steps.
 - For `SALES_LEAD_GENERATION`, `SUPPORT_ESCALATION`, `RETENTION_NURTURE`: backend auto-creates predefined steps with `isTemplatePrefilled: true`.
 - For `REENGAGEMENT_CAMPAIGNS`: blank slate — use `POST /automation-templates/:id/apply` (recommended) or add steps manually afterward.
 
@@ -923,9 +956,9 @@ Note: the `stepId` in the URL is the integer DB ID — parse `LogicStep.id` (whi
 PUT /automations/:id
 ```
 
-Partial update of automation metadata, triggers, and steps. All fields are optional — only the fields you supply are changed. When `triggers` or `steps` are provided, the existing records are **deleted and recreated** in full.
+Partial update of automation metadata, triggers, and steps. All fields are optional — only the fields you supply are changed. When `steps` are provided, existing records are **deleted and recreated** in full. Steps with `triggerType` replace existing triggers; regular steps replace existing action/condition steps.
 
-**Request body** (all fields optional)
+**Request body** (all fields optional, unified model)
 
 ```json
 {
@@ -942,11 +975,14 @@ Partial update of automation metadata, triggers, and steps. All fields are optio
   "allowedTagIds": [],
   "statusFilterEnabled": false,
   "allowedStatuses": [],
-  "triggers": [
+  "steps": [
     {
-      "triggerType": "ACTIVITY_THRESHOLD",
+      "clientId": "uuid-trigger-1",
+      "stepOrder": 0,
+      "stepType": "SEND_MESSAGE",
       "name": "30-day inactive",
-      "conditions": [
+      "triggerType": "ACTIVITY_THRESHOLD",
+      "triggerConditions": [
         {
           "conditionOrder": 0,
           "logicOperator": null,
@@ -961,8 +997,7 @@ Partial update of automation metadata, triggers, and steps. All fields are optio
         }
       ]
     }
-  ],
-  "steps": []
+  ]
 }
 ```
 
@@ -1196,7 +1231,7 @@ type CategorySlug =
   | "retention-nurture"
   | "reengagement-campaigns";
 
-type StepTypeRole = "action" | "condition" | "auto";
+type StepTypeRole = "trigger" | "action" | "condition" | "auto";
 type CompletionStatus = "pending" | "configured"; // "error" is client-side only
 
 interface TriggerNode {
@@ -1208,12 +1243,12 @@ interface TriggerNode {
 }
 
 interface LogicStep {
-  id: string; // stringified DB — parse to int for PATCH endpoint
-  type: StepTypeRole;
-  stepKey: string;
+  id: string; // stringified DB id, or "trigger-{id}" for trigger steps
+  type: StepTypeRole; // "trigger" for trigger steps
+  stepKey: string; // "trigger" for trigger steps
   label: string;
-  order: number;
-  config: Record<string, any>;
+  order: number; // -1 for trigger steps
+  config: Record<string, any>; // for triggers: { triggerType, conditions }
   nextStepIds: string[];
   completionStatus: CompletionStatus;
   isDefault: boolean;
@@ -1231,8 +1266,8 @@ interface AutomationResponse {
   logicVersion: string;
   logic: {
     version: string;
-    trigger: TriggerNode | null;
-    steps: LogicStep[];
+    trigger: TriggerNode | null; // backward-compat — same data is in steps[0] when type="trigger"
+    steps: LogicStep[]; // unified: trigger first (if any), then action/condition/auto steps
   };
   layout: AutomationLayout | null;
   _count?: { executions: number };
