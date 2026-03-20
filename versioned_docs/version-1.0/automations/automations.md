@@ -818,45 +818,6 @@ Steps with `triggerType` are extracted as triggers; regular steps are stored as 
 
 **Frontend-generated IDs:** The `clientId` field accepts any string (e.g. `crypto.randomUUID()`). It is not stored in the DB but is used to resolve `nextStepId` cross-references within the same request. After creation, the response returns DB-generated IDs.
 
-**Round-trip support:** You can also send steps in the exact response shape you received from `GET /automations/:id`. The backend normalizes aliases automatically:
-
-| Response field                                        | Canonical request field | Notes                                      |
-| ----------------------------------------------------- | ----------------------- | ------------------------------------------ |
-| `id`                                                  | `clientId`              | Frontend-generated UUID                    |
-| `order`                                               | `stepOrder`             | 0-based position                           |
-| `stepKey`                                             | `stepType`              | Kebab-case → enum (e.g. `"wait"` → `WAIT`) |
-| `label`                                               | `name`                  | Human-readable name                        |
-| `type: "trigger"`                                     | `triggerType`           | Detected from `config.triggerType`         |
-| `config.conditions`                                   | `triggerConditions`     | For trigger steps                          |
-| `nextStepIds`                                         | `nextStepId`            | Array → first element                      |
-| `completionStatus`, `isDefault`, `locked`, `required` | _(ignored)_             | Accepted but not stored                    |
-
-**Example — sending the response shape back as a PUT:**
-
-```json
-{
-  "name": "My Automation",
-  "steps": [
-    {
-      "id": "53050176-6e8c-4dd1-8fdc-8c8e846bdf1a",
-      "type": "trigger",
-      "stepKey": "trigger-condition",
-      "label": "Subscribes to a list",
-      "config": {
-        "triggerType": "SUBSCRIBES_TO_LIST",
-        "conditions": []
-      },
-      "order": 0,
-      "nextStepIds": [],
-      "completionStatus": "pending",
-      "isDefault": false,
-      "locked": false,
-      "required": false
-    }
-  ]
-}
-```
-
 **Legacy `triggers` array** is still accepted for backward compatibility:
 
 ```json
