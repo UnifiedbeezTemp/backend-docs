@@ -9,10 +9,12 @@
 ## Workflow
 
 1. **Snapshot the current state** before making breaking or significant changes:
+
    ```bash
    npx docusaurus docs:version <version-number>
    ```
-   Example: `npx docusaurus docs:version 1.1`
+
+   Example: `npx docusaurus docs:version 1.1.2`
 
 2. **Make your changes** in the `docs/` folder. These only affect the "Next" version.
 
@@ -20,10 +22,10 @@
 
 ## Current Setup
 
-| Version     | Location                        | Status |
-|-------------|---------------------------------|--------|
-| 1.0         | `versioned_docs/version-1.0/`   | Frozen |
-| Next        | `docs/`                         | Active |
+| Version | Location                      | Status |
+| ------- | ----------------------------- | ------ |
+| 1.0     | `versioned_docs/version-1.0/` | Frozen |
+| Next    | `docs/`                       | Active |
 
 ## Key Points
 
