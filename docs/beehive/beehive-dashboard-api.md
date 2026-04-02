@@ -85,18 +85,14 @@ Each `transfer*` flag controls whether the corresponding staged data is **kept**
 
 ---
 
-## Home — Brand Kit
+# Home — Brand Kit
+Brand Kit stores the visual identity for a user's organisation: logo, colours, typography, and social links. There is one brand kit per user.
+Fields are populated either **manually** (via `PUT /brand-kit` or `POST /brand-kit/upload-logo`) or **automatically** (via `GET /brand-kit/detect`). Calling detect always overwrites all detection fields with fresh results. The only exception: if detection returns no logo at all and the user already has one stored, the existing logo is preserved.
+---
 
-Brand Kit stores visual identity: logo, colours, fonts, social links. One brand kit per user/organisation.
-
-There is a **single logo field** — `companyLogoUrl`. It is set either by uploading a file (`POST /brand-kit/upload-logo`) or by auto-detection (`POST /brand-kit/detect`). A manually uploaded logo always takes precedence and will not be overwritten by detection.
-
-### GET `/brand-kit`
-
-Returns the current brand kit (or `null` if not yet created).
-
+## `GET /brand-kit`
+Returns the current brand kit for the authenticated user, or `null` if none has been created yet.
 **Response**
-
 ```json
 {
   "id": 1,
@@ -117,22 +113,17 @@ Returns the current brand kit (or `null` if not yet created).
   "instagram": "https://instagram.com/acme",
   "whatsapp": "+447700900000",
   "twitter": "https://twitter.com/acme",
-  "youtube": null,
-  "facebook": null,
+  "youtube": "https://youtube.com/@acme",
+  "facebook": "https://facebook.com/acme",
   "linkedin": "https://linkedin.com/company/acme",
   "createdAt": "2026-03-06T10:00:00.000Z",
   "updatedAt": "2026-03-06T10:00:00.000Z"
 }
 ```
-
 ---
-
-### PUT `/brand-kit`
-
-Create or update the brand kit (upsert). Send only the fields you want to change.
-
+## `PUT /brand-kit`
+Create or update the brand kit (upsert). Send only the fields you want to change — omitted fields are left untouched.
 **Request body** (all fields optional)
-
 ```json
 {
   "websiteUrl": "https://acme.com",
@@ -155,60 +146,138 @@ Create or update the brand kit (upsert). Send only the fields you want to change
   "linkedin": "https://linkedin.com/company/acme"
 }
 ```
-
-**Response** — returns the updated brand kit object.
+**Response** — returns the full updated brand kit object (same shape as `GET /brand-kit`).
 
 ---
-
-### POST `/brand-kit/upload-logo`
-
-Upload a company logo. `multipart/form-data`, field name `file`. Max 5 MB.
+## `POST /brand-kit/upload-logo`
+Upload a company logo. `multipart/form-data`, field name `file`. Maximum file size: **5 MB**.
+The uploaded logo is stored in S3 and replaces any previously uploaded logo (the old file is deleted). A manually uploaded logo is never overwritten by auto-detection.
 
 **Response**
-
 ```json
-{
-  "logoUrl": "https://cdn.unifiedbeez.com/brand-kits/logos/42/1234567890-logo.png"
-}
+{ "logoUrl": "https://cdn.unifiedbeez.com/brand-kits/logos/42/1234567890-logo.png" }
 ```
-
 ---
-
-### DELETE `/brand-kit/logo`
-
-Remove the uploaded company logo (deletes from S3).
-
+## `DELETE /brand-kit/logo`
+Remove the uploaded company logo. Deletes the file from S3 and clears `companyLogoUrl` on the brand kit record.
 **Response**
 
 ```json
 { "message": "Logo removed" }
 ```
-
 ---
+## `GET /brand-kit/detect?websiteUrl=`
+Auto-detect brand identity from a website URL. This is a **Server-Sent Events (SSE)** endpoint — it streams results as they become available rather than waiting for the full response.
 
-### POST `/brand-kit/detect`
+**Query parameter**
+| Parameter    | Required | Description                          |
+|--------------|----------|--------------------------------------|
+| `websiteUrl` | Yes      | The website to scrape, e.g. `https://acme.com` |
+### How detection works
+Detection runs in up to two phases automatically:
+**Phase 1 — Quick pass (~200–500 ms)**
+Fetches the raw HTML via HTTP and parses it with Cheerio. Extracts:
+- Logo (apple-touch-icon → og:logo → JSON-LD Organization.logo → SVG/PNG favicon)
+- Colours (CSS variables, `theme-color` meta, body background)
+- Fonts (Google Fonts links, `@import`, `@font-face` declarations)
+- Social links (`<a href>` tags + JSON-LD `Organization.sameAs`)
 
-Auto-detect brand colours and logo from a website URL. Persists `websiteUrl` into the brand kit and pre-fills `companyLogoUrl` **only if the user has not already uploaded a logo**. Returns the detected values so the frontend can preview them.
 
-**Request body**
+An **accuracy score** (0–100) is computed from 5 signal groups (20 pts each):
+| Signal group | Points |
+|---|---|
+| Logo found | 20 |
+| Primary colour found | 20 |
+| Any font found | 20 |
+| Any social link found | 20 |
+| Accent or background colour found | 20 |
+If the accuracy score is **≥ 80**, a single `complete` event is emitted immediately and detection ends.
 
-```json
-{ "websiteUrl": "https://acme.com" }
+
+**Phase 2 — Advanced search (automatically triggered when score < 80)**
+A `partial` event is emitted instantly with the quick-pass result so the frontend can show a loading indicator. Then:
+1. If the site appears to be a JavaScript-rendered SPA (no logo and no colour in the quick pass), **Playwright** launches a headless Chromium browser, fully renders the page (waits for `networkidle`), and reads the live DOM.
+2. All same-origin stylesheets (CSS files hosted on the brand's own domain) are fetched in parallel and combined with the page CSS for deeper colour extraction.
+3. When Playwright is used, computed CSS variables and element styles are read directly from the browser via `page.evaluate()` — this captures colours from JS-injected stylesheets, CSS modules, and any design system that doesn't use standard variable names.
+4. Font weights are read from `getComputedStyle(h1).fontWeight` and `getComputedStyle(body).fontWeight`.
+5. Button and hero section backgrounds are inspected to identify the primary and accent colours, including extraction of the first colour stop from CSS gradients.
+A final `complete` event is emitted with the enriched result and all fields are saved to the database.
+### SSE event stream
+Connect using `EventSource` or any SSE client. The connection closes automatically after the `complete` event.
+
+
+**Scenario A — score ≥ 80 on first pass (single event):**
+```
+event: complete
+data: { ...result, "advancedSearchTriggered": false }
+
+```
+**Scenario B — score < 80 (two events):**
+```
+event: partial
+data: { ...partialResult, "advancedSearchTriggered": true }
+event: complete
+data: { ...fullResult, "advancedSearchTriggered": true }
 ```
 
-**Response**
+### Response fields (data payload of each event)
 
-```json
-{
-  "companyLogoUrl": "https://acme.com/og-image.png",
-  "detectedPrimaryColor": "#1A56DB",
-  "detectedFaviconUrl": "https://acme.com/favicon.ico"
-}
+| Field | Type | Description |
+|---|---|---|
+| `companyLogoUrl` | `string \| null` | Best available logo URL (apple-touch-icon, JSON-LD logo, or SVG favicon) |
+| `detectedFaviconUrl` | `string \| null` | Site favicon URL |
+| `detectedPrimaryColor` | `string \| null` | Primary brand colour (hex, rgb, or hsl) |
+| `detectedAccentColor` | `string \| null` | Secondary / accent colour |
+| `detectedBackgroundColor` | `string \| null` | Page background colour |
+| `detectedButtonColor` | `string \| null` | CTA button colour (may be a gradient first stop) |
+| `headerFontStyle` | `string \| null` | Heading font family name |
+| `headerFontWeight` | `string \| null` | Heading font weight (e.g. `"700"`) |
+| `bodyFontStyle` | `string \| null` | Body font family name |
+| `bodyFontWeight` | `string \| null` | Body font weight (e.g. `"400"`) |
+| `instagram` | `string \| null` | Instagram profile URL |
+| `twitter` | `string \| null` | Twitter / X profile URL |
+| `facebook` | `string \| null` | Facebook page URL |
+| `linkedin` | `string \| null` | LinkedIn company URL |
+| `youtube` | `string \| null` | YouTube channel URL |
+| `accuracyScore` | `number` | 0–100 confidence score for the detection result |
+| `advancedSearchTriggered` | `boolean` | Whether Phase 2 was activated |
+All detected fields are `null` if they could notbe found on the page.
+
+### Persistence
+All detected fields are written to the brand kit record immediately after the `complete` event. Every call to this endpoint **overwrites** all previously detected values with the fresh results. The one exception: if detection returns no logo (`companyLogoUrl: null`) but the user already has a logo stored, the existing logo is preserved.
+
+
+### Expected response times
+| Scenario | `partial` event | `complete` event |
+|---|---|---|
+| Score ≥ 80, static site | — | ~500 ms – 1 s |
+| Score ≥ 80, SPA | — | ~5 – 10 s |
+| Score < 80, static site | ~500 ms | +2 – 8 s |
+| Score < 80, SPA | ~500 ms | +8 – 15 s |
+
+
+### Frontend usage example
+```javascript
+const source = new EventSource(
+  `/api/v1/brand-kit/detect?websiteUrl=https://acme.com`,
+  { headers: { Authorization: `Bearer ${token}` } }
+);
+source.addEventListener('partial', (e) => {
+  const data = JSON.parse(e.data);
+  // Show "Enhancing results..." spinner — advanced search is running
+  console.log('Partial result, score:', data.accuracyScore);
+});
+source.addEventListener('complete', (e) => {
+  const data = JSON.parse(e.data);
+  // Populate the brand kit UI with the final result
+  console.log('Detection complete, score:', data.accuracyScore);
+  source.close();
+});
 ```
-
-> Fields will be `null` if they couldn't be detected from the page.
-> `companyLogoUrl` is only written to the brand kit if it is currently empty — an existing uploaded logo is never overwritten by detection.
-
+### Known limitations
+- **Bot-protected sites:** Sites behind Cloudflare or similar WAFs may block detection even with Playwright. Nothing can be done without proxy infrastructure.
+- **CDN stylesheets:** Only same-origin CSS files are fetched during advanced search. Third-party CDN stylesheets (Bootstrap, Tailwind, etc.) are intentionally skipped to avoid polluting brand colours with generic utility values.
+- **Custom fonts:** Fonts loaded from private CDNs or self-hosted font files (not Google Fonts) are detected via `@font-face` declarations and computed styles, but the font name reported is whatever the CSS declares — it may differ from the brand's marketed font name.
 ---
 
 ## Inbox — General
