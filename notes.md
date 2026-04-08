@@ -14,7 +14,7 @@
    npx docusaurus docs:version <version-number>
    ```
 
-   Example: `npx docusaurus docs:version 1.3.5`
+   Example: `npx docusaurus docs:version 1.3.7`
 
 2. **Make your changes** in the `docs/` folder. These only affect the "Next" version.
 
