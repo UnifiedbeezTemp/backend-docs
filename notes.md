@@ -27,6 +27,21 @@
 | 1.0     | `versioned_docs/version-1.0/` | Frozen |
 | Next    | `docs/`                       | Active |
 
+## How to Delete an Old Version
+
+Run the delete script:
+
+```bash
+npm run delete-version <version>
+```
+
+Example: `npm run delete-version 1.0`
+
+This will automatically:
+1. Delete `versioned_docs/version-<X>/`
+2. Delete `versioned_sidebars/version-<X>-sidebars.json`
+3. Remove the entry from `versions.json`
+
 ## Key Points
 
 - You do **not** need to version after every edit — only when you want to preserve a snapshot.
