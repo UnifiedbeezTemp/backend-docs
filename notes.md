@@ -14,7 +14,7 @@
    npx docusaurus docs:version <version-number>
    ```
 
-   Example: `npx docusaurus docs:version 1.3.9.4`
+   Example: `npx docusaurus docs:version 1.4.0`
 
 2. **Make your changes** in the `docs/` folder. These only affect the "Next" version.
 
@@ -38,6 +38,7 @@ npm run delete-version <version>
 Example: `npm run delete-version 1.0`
 
 This will automatically:
+
 1. Delete `versioned_docs/version-<X>/`
 2. Delete `versioned_sidebars/version-<X>-sidebars.json`
 3. Remove the entry from `versions.json`
