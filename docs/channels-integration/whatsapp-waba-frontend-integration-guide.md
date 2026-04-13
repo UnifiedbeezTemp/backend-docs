@@ -445,7 +445,7 @@ Content-Type: application/json
 }
 ```
 
-> **Note on 24-hour window:** WhatsApp requires a business to initiate conversations using an approved **template message** outside of the 24-hour customer service window. Free-form text (`type: "text"`) can only be sent within 24 hours of the customer's last message. For template-based messaging see [WhatsApp Templates](./whatsapp-templates.md).
+> **Note on 24-hour window:** WhatsApp requires a business to initiate conversations using an approved **template message** outside of the 24-hour customer service window. Free-form text (`type: "text"`) can only be sent within 24 hours of the customer's last message. For template-based messaging see [WhatsApp Templates](../automations/whatsapp-templates.md).
 
 ---
 
