@@ -1,0 +1,8 @@
+{
+  "label": "copilot",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "Contains information on integrating copilot on the frontend"
+  }
+}
