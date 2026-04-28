@@ -929,9 +929,36 @@ POST /webchat/links/:id/move-to-label/:labelId
 
 ---
 
-## Webchat — Reorder direct items
+## Webchat — Direct items
 
-Directly-added livechats, channels, and links each live in their own table with independent `displayOrder` sequences. To interleave them in the widget panel (e.g. show a WhatsApp channel between two livechat entries), assign globally-unique `displayOrder` values across all three types using this endpoint. The frontend should merge the three lists, sort by `displayOrder`, and render them in that order.
+Directly-added livechats, channels, and links are returned as a single merged `directItems[]` array in both `GET /webchat/:id` and `GET /webchat/:webchatId/config`. Each item has a `type` field (`"livechat"` | `"channel"` | `"link"`) and a `displayOrder` field. The array is pre-sorted by `displayOrder` so the frontend can render it directly without merging multiple lists.
+
+`liveChats[]` is also returned separately in both responses for backward compatibility — it is used by the widget header to render the quick-access live chat pills. Do not use it for the flat panel list; use `directItems[]` instead.
+
+### directItems shape
+
+Each entry in `directItems[]` has:
+
+| Field | Present on types | Notes |
+|---|---|---|
+| `type` | all | `"livechat"` \| `"channel"` \| `"link"` |
+| `id` | all | Junction row ID — use this in the reorder endpoint |
+| `displayOrder` | all | Position in the merged list |
+| `liveChatConfigId` | `livechat` | ID of the `LiveChatConfig` — pass as `liveChatConfigId` when starting a chat |
+| `chatName` | `livechat` | Display name |
+| `profilePic` | `livechat` | |
+| `readReceipts` | `livechat` | Only in public config (`GET /webchat/:id/config`) |
+| `accountType` | `channel` | e.g. `"WHATSAPP"`, `"LIVECHAT"` |
+| `accountId` | `channel` | |
+| `displayName` | `channel` | Resolved human-readable name (e.g. phone number, page name) |
+| `icon` | `channel` | |
+| `contactUrl` | `channel` | Only in public config — external URL to open (wa.me, mailto, etc.) |
+| `linkType` | `link` | `"WEBSITE"` \| `"EMAIL"` \| `"PHONE"` |
+| `text` | `link` | Display label |
+| `icon` | `link` | |
+| `websiteUrl` | `link` | Set when `linkType` is `"WEBSITE"` |
+| `emailAddress` | `link` | Set when `linkType` is `"EMAIL"` |
+| `phoneNumber` | `link` | Set when `linkType` is `"PHONE"` |
 
 ### Reorder directly-added items
 
@@ -1171,21 +1198,46 @@ Returns everything the widget needs to render: branding, communication labels, l
   ],
   "liveChats": [
     { "id": 3, "chatName": "Sales", "profilePic": null, "readReceipts": false },
+    { "id": 4, "chatName": "Support", "profilePic": "https://cdn.example.com/support.png", "readReceipts": true }
+  ],
+  "directItems": [
     {
-      "id": 4,
-      "chatName": "Support",
-      "profilePic": "https://cdn.example.com/support.png",
-      "readReceipts": true
+      "type": "livechat",
+      "id": 1,
+      "liveChatConfigId": 3,
+      "chatName": "Sales",
+      "profilePic": null,
+      "readReceipts": false,
+      "displayOrder": 0
+    },
+    {
+      "type": "channel",
+      "id": 3,
+      "accountType": "WHATSAPP",
+      "accountId": 7,
+      "displayName": "+1 555-0100",
+      "icon": null,
+      "displayOrder": 1,
+      "contactUrl": "https://wa.me/15550100"
+    },
+    {
+      "type": "link",
+      "id": 2,
+      "linkType": "WEBSITE",
+      "text": "Visit our site",
+      "icon": null,
+      "displayOrder": 2,
+      "websiteUrl": "https://example.com",
+      "emailAddress": null,
+      "phoneNumber": null
     }
   ]
 }
 ```
 
-The `liveChats` array is the **live chat list** rendered as a quick-access pill in the widget header. It contains **only LiveChats explicitly attached to this widget** (via `POST /webchat/:id/livechats`) that are currently active. A user with multiple LiveChat accounts and multiple webchats controls independently which LiveChats appear on each widget. The visitor picks one entry and the widget sends its `id` as `liveChatConfigId` in the `send_message` WebSocket event to start a conversation.
+The `liveChats` array is the **live chat list** rendered as a quick-access pill in the widget header. It contains **only LiveChats explicitly attached to this widget** (via `POST /webchat/:id/livechats`) that are currently active. The visitor picks one entry and the widget sends its `id` as `liveChatConfigId` in the `send_message` WebSocket event to start a conversation.
 
-The `directChannels` array contains channels attached directly to the widget body (via `POST /webchat/:id/channels`), outside any label. Each entry includes a `contactUrl` (e.g. `https://wa.me/...`, `mailto:...`) for non-LiveChat types. `LIVECHAT` entries include `accountId` — use that as `liveChatConfigId` when starting a chat, same as `liveChats[]` entries.
-
-The `directLinks` array contains website/email/phone links attached directly to the widget body (via `POST /webchat/:id/links`), outside any label. Each entry includes `linkType`, `text`, and the relevant URL field (`websiteUrl`, `emailAddress`, or `phoneNumber`).
+The `directItems` array is the **flat panel list** — a single merged, pre-sorted array of all livechats, channels, and links attached directly to the widget body (outside any label). Each entry has a `type` field so the frontend knows how to render it. Items are ordered by `displayOrder` across all three types, enabling full interleaving. For `channel` entries, `contactUrl` contains the external URL to open (wa.me, mailto, tel, etc.). For `livechat` entries, use `liveChatConfigId` as the `liveChatConfigId` in the `send_message` socket event.
 
 ---
 
