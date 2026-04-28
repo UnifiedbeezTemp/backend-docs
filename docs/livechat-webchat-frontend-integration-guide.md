@@ -929,6 +929,56 @@ POST /webchat/links/:id/move-to-label/:labelId
 
 ---
 
+## Webchat — Reorder direct items
+
+Directly-added livechats, channels, and links each live in their own table with independent `displayOrder` sequences. To interleave them in the widget panel (e.g. show a WhatsApp channel between two livechat entries), assign globally-unique `displayOrder` values across all three types using this endpoint. The frontend should merge the three lists, sort by `displayOrder`, and render them in that order.
+
+### Reorder directly-added items
+
+```
+PATCH /webchat/:id/direct-items/reorder
+Content-Type: application/json
+```
+
+**Request body**
+
+```json
+{
+  "items": [
+    { "type": "livechat", "id": 1, "displayOrder": 0 },
+    { "type": "channel",  "id": 3, "displayOrder": 1 },
+    { "type": "link",     "id": 2, "displayOrder": 2 },
+    { "type": "channel",  "id": 5, "displayOrder": 3 }
+  ]
+}
+```
+
+| Field                  | Type    | Required | Constraints                                   |
+| ---------------------- | ------- | -------- | --------------------------------------------- |
+| `items`                | array   | ✅       |                                               |
+| `items[].type`         | enum    | ✅       | `"livechat"` \| `"channel"` \| `"link"`       |
+| `items[].id`           | integer | ✅       | ≥ 1 — row ID from the respective attach call  |
+| `items[].displayOrder` | integer | ✅       | ≥ 0 — must be globally unique across all types |
+
+You only need to include items whose order is changing. Items omitted from the list are not modified. All updates run in a single transaction.
+
+**Response `200`**
+
+```json
+{ "message": "Items reordered successfully" }
+```
+
+**Errors**
+
+| Status | Condition                            |
+| ------ | ------------------------------------ |
+| `400`  | `items` missing or invalid           |
+| `400`  | `type` is not a valid enum value     |
+| `400`  | `id` is `0`                          |
+| `404`  | Webchat not found or belongs to another user |
+
+---
+
 ## Webchat — Installation
 
 ### Get embed code
