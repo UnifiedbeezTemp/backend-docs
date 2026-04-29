@@ -1,8 +1,0 @@
-{
-  "label": "beehive",
-  "position": 4,
-  "link": {
-    "type": "generated-index",
-    "description": "Contains information on integrating beehive on the frontend"
-  }
-}
