@@ -1,0 +1,8 @@
+{
+  "label": "Incidents",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Postmortems for past incidents — what happened, root cause, and lessons learned."
+  }
+}

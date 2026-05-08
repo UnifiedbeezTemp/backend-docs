@@ -1,0 +1,8 @@
+{
+  "label": "Audit & Reference",
+  "position": 10,
+  "link": {
+    "type": "generated-index",
+    "description": "Backend and infrastructure reference documentation — architecture, modules, coding standards, deployment, runbooks, and incidents."
+  }
+}
